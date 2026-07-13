@@ -92,6 +92,15 @@ and duplicate rule ids across sources. The allowed shapes are extracted from the
 `schema/custom-detection.schema.json`, so editors with yaml-language-server flag mistakes while the
 analyst types, and CI can pre-check files with the same schema before Terraform runs.
 
+Values are also **normalised on a best endeavours basis**, because analysts author these files:
+keys stay strict (they are the schema contract editors autocomplete), values are forgiving.
+`status`, `severity` and `isolation_type` are case insensitive; `frequency` and technique ids
+uppercase themselves (`pt1h` becomes `PT1H`, `t1110` becomes `T1110`); tactics resolve case and
+separator insensitively (`credential access`, `credential-access` and `CredentialAccess` all
+deploy as `CredentialAccess`, and the British `DefenceEvasion` maps to the API's
+`DefenseEvasion`). Truly unknown values still fail the plan with the canonical list named, and
+the editor schema keeps nudging the canonical spellings.
+
 Two advisory checks warn without failing: a query that does not visibly return `Timestamp` and
 `ReportId` (custom detections must output them; rename projections can hide them from the token
 scan), and a rule with no MITRE mapping (it would vanish from coverage reporting).
@@ -104,6 +113,27 @@ Microsoft is removing the legacy detection rule properties on **2026-10-01** (`i
 techniques, `entityMappings`, and `automatedActions` from day one. Custom detection rules are beta
 only today, so `api_version` defaults to `beta`; it is a plain variable, so flip it to `v1.0` the
 day Microsoft promotes the API, without waiting for a module release.
+
+## Live API reality, encoded
+
+The beta docs and the live service disagree in places; every divergence below was hit on a real
+tenant and is now encoded in the module rather than left for you to find:
+
+- **One tactic per rule.** The docs model `tactics` as a collection; the service 400s on more than
+  one ("Only one tactic is currently supported"). Authoring keeps the full list, the body sends
+  only the first tactic, and the `rules` / `mitre_coverage` outputs report everything authored,
+  ready to send in full the day the API accepts it.
+- **Mail message mappings have a mandatory column combination.** Network message id, recipient and
+  sender must map together (a lesser pair 400s with "at least one mandatory field combination");
+  the validator enforces it and subject is recommended.
+- **Deletes can hang server side** (observed via both the API and the portal). The rule resource
+  carries a 10 minute delete timeout and transient error retries by default (`timeouts`,
+  `retry_error_message_regex`), so a wedged delete fails loudly instead of spinning.
+- **Portability is a catalog quality bar.** Catalog rules only use hunting tables that resolve in
+  any Defender XDR tenant (Device*, Email*, Identity*, CloudApp*). Entra specific tables like
+  `AadSignInEventsBeta` only resolve when that data flows into XDR, so a rule on them fails both
+  remote validation and the create elsewhere; the in graph validation catches this before anything
+  deploys, which is exactly its job.
 
 ## Automated response actions are a deliberate opt in
 

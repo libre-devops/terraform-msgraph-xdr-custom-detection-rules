@@ -209,7 +209,8 @@
       }
     },
     "mailMessagesMapping": {
-      "type": "object", "additionalProperties": false, "minProperties": 1,
+      "type": "object", "additionalProperties": false,
+      "required": ["network_message_id_column", "recipient_column", "sender_column"],
       "properties": {
         "network_message_id_column": { "$ref": "#/$defs/column" },
         "recipient_column": { "$ref": "#/$defs/column" },

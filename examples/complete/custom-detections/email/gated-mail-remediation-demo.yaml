@@ -12,16 +12,20 @@ frequency: PT24H
 query: |
   EmailEvents
   | where Subject == "ldo-demo-subject-that-never-matches-2f6c1b"
-  | project Timestamp, ReportId, NetworkMessageId, RecipientEmailAddress
+  | project Timestamp, ReportId, NetworkMessageId, RecipientEmailAddress, SenderFromAddress, Subject
 alert:
   severity: informational
   mitre:
     - tactic: InitialAccess
       techniques: [T1566]
   entity_mappings:
+    # The API requires the network message id, recipient and sender columns together (live 400 on
+    # a lesser combination); subject completes the proven shape.
     mail_messages:
       - network_message_id_column: NetworkMessageId
         recipient_column: RecipientEmailAddress
+        sender_column: SenderFromAddress
+        subject_column: Subject
 automated_actions:
   soft_delete_emails:
     - network_message_id_column: NetworkMessageId

@@ -118,6 +118,30 @@ locals {
 
   # Attribute names whose generic snake_case to camelCase conversion would be wrong.
   camel_overrides = { oauth_app_id_column = "oAuthAppIdColumn" }
+
+  # Value normalisation, best endeavours for analyst input: KEYS are strict (they are the schema
+  # contract and editors autocomplete them), VALUES are forgiving. status, severity and isolation
+  # types compare and emit lowercased; frequencies and technique ids uppercased (pt1h, t1110);
+  # tactics resolve case and separator insensitively through this map (credential access,
+  # credential-access and CredentialAccess all canonicalise, and the British DefenceEvasion maps to
+  # the API's DefenseEvasion). Unknown values still fail the plan with the canonical list named.
+  tactic_canonical = {
+    collection          = "Collection"
+    commandandcontrol   = "CommandAndControl"
+    credentialaccess    = "CredentialAccess"
+    defenceevasion      = "DefenseEvasion"
+    defenseevasion      = "DefenseEvasion"
+    discovery           = "Discovery"
+    execution           = "Execution"
+    exfiltration        = "Exfiltration"
+    impact              = "Impact"
+    initialaccess       = "InitialAccess"
+    lateralmovement     = "LateralMovement"
+    persistence         = "Persistence"
+    privilegeescalation = "PrivilegeEscalation"
+    reconnaissance      = "Reconnaissance"
+    resourcedevelopment = "ResourceDevelopment"
+  }
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -257,13 +281,13 @@ locals {
   v_status = [
     for k, r in local.rules :
     "${r.file}: status ${try(tostring(r.raw.status), "(not a string)")} is invalid (allowed: ${join(", ", local.statuses)})"
-    if r.valid && try(contains(keys(r.raw), "status"), false) && !contains(local.statuses, try(tostring(r.raw.status), ""))
+    if r.valid && try(contains(keys(r.raw), "status"), false) && !contains(local.statuses, try(lower(tostring(r.raw.status)), ""))
   ]
 
   v_frequency = [
     for k, r in local.rules :
     "${r.file}: frequency ${try(tostring(r.raw.frequency), "(not a string)")} is not in allowed_frequencies (${join(", ", var.allowed_frequencies)})"
-    if r.valid && try(contains(keys(r.raw), "frequency"), false) && !contains(var.allowed_frequencies, try(tostring(r.raw.frequency), ""))
+    if r.valid && try(contains(keys(r.raw), "frequency"), false) && !contains([for f in var.allowed_frequencies : upper(f)], try(upper(tostring(r.raw.frequency)), ""))
   ]
 
   v_query = [
@@ -294,7 +318,7 @@ locals {
             "${r.file}: unknown alert attribute ${uk} (allowed: ${join(", ", local.alert_keys)})"
           ],
           contains(keys(r.raw.alert), "severity") ? (
-            contains(local.severities, try(tostring(r.raw.alert.severity), "")) ? [] :
+            contains(local.severities, try(lower(tostring(r.raw.alert.severity)), "")) ? [] :
             ["${r.file}: alert.severity ${try(tostring(r.raw.alert.severity), "(not a string)")} is invalid (allowed: ${join(", ", local.severities)})"]
           ) : ["${r.file}: required attribute alert.severity is missing"],
           contains(keys(r.raw.alert), "custom_details") ? (
@@ -321,14 +345,14 @@ locals {
                 "${r.file}: unknown mitre attribute ${uk} (allowed: ${join(", ", local.mitre_keys)})"
               ],
               contains(keys(m), "tactic") ? (
-                contains(local.tactics, try(tostring(m.tactic), "")) ? [] :
+                contains(keys(local.tactic_canonical), replace(lower(try(tostring(m.tactic), "?")), "/[ _-]/", "")) ? [] :
                 ["${r.file}: mitre tactic ${try(tostring(m.tactic), "(not a string)")} is not a MITRE ATT&CK enterprise tactic (allowed: ${join(", ", local.tactics)})"]
               ) : ["${r.file}: every mitre entry needs a tactic"],
               contains(keys(m), "techniques") ? (
                 can(concat(m.techniques, [])) ? flatten([
                   for t in m.techniques : (
                     can(tostring(t)) ? (
-                      can(regex(local.technique_pattern, tostring(t))) ? [] :
+                      can(regex(local.technique_pattern, upper(tostring(t)))) ? [] :
                       ["${r.file}: technique ${tostring(t)} must look like T1059 or T1059.001"]
                       ) : (
                       can(keys(t)) ? concat(
@@ -336,13 +360,13 @@ locals {
                           for uk in setsubtract(keys(t), local.technique_keys) :
                           "${r.file}: unknown technique attribute ${uk} (allowed: ${join(", ", local.technique_keys)})"
                         ],
-                        can(regex(local.technique_pattern, try(tostring(t.technique), ""))) ? [] :
+                        can(regex(local.technique_pattern, try(upper(tostring(t.technique)), ""))) ? [] :
                         ["${r.file}: technique ${try(tostring(t.technique), "(missing)")} must look like T1059 or T1059.001"],
                         contains(keys(t), "sub_techniques") ? (
                           can(concat(t.sub_techniques, [])) ? [
                             for st in t.sub_techniques :
                             "${r.file}: sub technique ${try(tostring(st), "(not a string)")} must look like T1059.001"
-                            if !can(regex(local.sub_technique_pattern, try(tostring(st), "")))
+                            if !can(regex(local.sub_technique_pattern, try(upper(tostring(st)), "")))
                           ] : ["${r.file}: sub_techniques must be a list"]
                         ) : [],
                       ) : ["${r.file}: techniques entries must be strings or mappings"]
@@ -392,6 +416,18 @@ locals {
     )
   ])
 
+  # Live 400 (InvalidInput): "Entity mapping for 'MailMessage' is invalid. At least one mandatory
+  # field combination must have non-empty column values." The proven good shape maps network
+  # message id, recipient and sender together (the four column baseline rule created clean; a
+  # network id plus recipient pair was rejected).
+  v_mail_message_combo = flatten([
+    for k, r in local.rules : [
+      for it in try(concat(r.raw.alert.entity_mappings.mail_messages, []), []) :
+      "${r.file}: mail_messages mappings must set network_message_id_column, recipient_column and sender_column together (the API rejects lesser combinations; subject_column is recommended too)"
+      if can(keys(it)) && length(setsubtract(["network_message_id_column", "recipient_column", "sender_column"], keys(it))) > 0
+    ]
+  ])
+
   # ---- automated actions (destructive, gated) ----
   v_actions_gate = var.allow_automated_actions ? [] : [
     for k, r in local.rules :
@@ -422,7 +458,7 @@ locals {
                         "${r.file}: ${g} attribute ${ck} must name a non empty query column"
                         if ck != "device_group_names" && ck != "isolation_type" && trimspace(try(tostring(cv), "")) == ""
                       ],
-                      contains(keys(it), "isolation_type") && !contains(local.isolation_types, try(tostring(it.isolation_type), "")) ?
+                      contains(keys(it), "isolation_type") && !contains(local.isolation_types, try(lower(tostring(it.isolation_type)), "")) ?
                       ["${r.file}: ${g} isolation_type ${try(tostring(it.isolation_type), "(not a string)")} is invalid (allowed: ${join(", ", local.isolation_types)})"] : [],
                       contains(keys(it), "device_group_names") && !can(concat(it.device_group_names, [])) ?
                       ["${r.file}: ${g} device_group_names must be a list of device group names"] : [],
@@ -447,11 +483,11 @@ locals {
           for uk in setsubtract(keys(ov), local.override_keys) :
           "baseline_overrides[${ok}]: unknown attribute ${uk} (allowed: ${join(", ", local.override_keys)})"
         ],
-        contains(keys(ov), "status") && !contains(local.statuses, try(tostring(ov.status), "")) ?
+        contains(keys(ov), "status") && !contains(local.statuses, try(lower(tostring(ov.status)), "")) ?
         ["baseline_overrides[${ok}]: status must be one of ${join(", ", local.statuses)}"] : [],
-        contains(keys(ov), "frequency") && !contains(var.allowed_frequencies, try(tostring(ov.frequency), "")) ?
+        contains(keys(ov), "frequency") && !contains([for f in var.allowed_frequencies : upper(f)], try(upper(tostring(ov.frequency)), "")) ?
         ["baseline_overrides[${ok}]: frequency must be in allowed_frequencies (${join(", ", var.allowed_frequencies)})"] : [],
-        contains(keys(ov), "severity") && !contains(local.severities, try(tostring(ov.severity), "")) ?
+        contains(keys(ov), "severity") && !contains(local.severities, try(lower(tostring(ov.severity)), "")) ?
         ["baseline_overrides[${ok}]: severity must be one of ${join(", ", local.severities)}"] : [],
       ) : ["baseline_overrides[${ok}]: must be a mapping"],
     )
@@ -461,7 +497,7 @@ locals {
     local.v_parse, local.v_duplicates, local.v_top_keys, local.v_required, local.v_hcl_id,
     local.v_key_format, local.v_display_name, local.v_status, local.v_frequency, local.v_query,
     local.v_device_groups, local.v_alert, local.v_mitre, local.v_entity_mappings,
-    local.v_actions_gate, local.v_automated_actions, local.v_overrides,
+    local.v_mail_message_combo, local.v_actions_gate, local.v_automated_actions, local.v_overrides,
   ))
 }
 
@@ -477,18 +513,18 @@ locals {
   norm_mitre = {
     for k, r in local.rules : k => [
       for m in try(concat(r.raw.alert.mitre, []), []) : merge(
-        { tactic = try(tostring(m.tactic), "unknown") },
+        { tactic = lookup(local.tactic_canonical, replace(lower(try(tostring(m.tactic), "unknown")), "/[ _-]/", ""), try(tostring(m.tactic), "unknown")) },
         {
           techniques = concat(
             [
               for t in try(concat(m.techniques, []), []) :
-              { technique = tostring(t) } if can(tostring(t))
+              { technique = upper(tostring(t)) } if can(tostring(t))
             ],
             [
               for t in try(concat(m.techniques, []), []) :
               merge(
-                { technique = try(tostring(t.technique), "unknown") },
-                try(length(t.sub_techniques) > 0, false) ? { subTechniques = t.sub_techniques } : {},
+                { technique = try(upper(tostring(t.technique)), "unknown") },
+                try(length(t.sub_techniques) > 0, false) ? { subTechniques = [for st in try(concat(t.sub_techniques, []), []) : try(upper(tostring(st)), "unknown")] } : {},
               ) if !can(tostring(t))
             ],
           )
@@ -509,14 +545,24 @@ locals {
     } if r.valid
   }
 
+  # isolation_type merges separately (lowercased) because a ternary over the mixed value types the
+  # generic pass carries (strings and the device_group_names list) cannot type-unify.
   norm_automated_actions = {
     for k, r in local.rules : k => {
       for g, items in(can(keys(try(r.raw.automated_actions, 0))) ? r.raw.automated_actions : {}) :
       lookup(local.automated_action_graph_names, g, g) => [
-        for it in try(concat(items, []), []) : {
-          for ck, cv in(can(keys(it)) ? it : {}) :
-          lookup(local.camel_overrides, ck, join("", [for i, p in split("_", ck) : i == 0 ? p : title(p)])) => cv
-        }
+        for it in try(concat(items, []), []) : merge(
+          {
+            for ck, cv in(can(keys(it)) ? it : {}) :
+            lookup(local.camel_overrides, ck, join("", [for i, p in split("_", ck) : i == 0 ? p : title(p)])) => cv
+            if ck != "isolation_type"
+          },
+          {
+            for ck, cv in(can(keys(it)) ? it : {}) :
+            "isolationType" => try(lower(tostring(cv)), "unknown")
+            if ck == "isolation_type"
+          },
+        )
       ]
     } if r.valid
   }
@@ -528,20 +574,25 @@ locals {
           id             = k
           displayName    = try(tostring(r.raw.display_name), k)
           description    = try(tostring(r.raw.description), null)
-          status         = try(tostring(r.raw.status), "enabled")
+          status         = try(lower(tostring(r.raw.status)), "enabled")
           queryCondition = { queryText = try(tostring(r.raw.query), "") }
-          schedule       = { frequency = try(tostring(r.raw.frequency), "PT24H") }
+          schedule       = { frequency = try(upper(tostring(r.raw.frequency)), "PT24H") }
           detectionAction = merge(
             {
               alertTemplate = {
                 for ak, av in {
                   title              = coalesce(try(tostring(r.raw.alert.title), null), try(tostring(r.raw.display_name), null), k)
                   description        = coalesce(try(tostring(r.raw.alert.description), null), try(tostring(r.raw.description), null), try(tostring(r.raw.display_name), null), k)
-                  severity           = try(tostring(r.raw.alert.severity), "medium")
+                  severity           = try(lower(tostring(r.raw.alert.severity)), "medium")
                   recommendedActions = try(tostring(r.raw.alert.recommended_actions), null)
                   customDetails      = can(keys(try(r.raw.alert.custom_details, 0))) ? r.raw.alert.custom_details : null
-                  tactics            = length(local.norm_mitre[k]) > 0 ? local.norm_mitre[k] : null
-                  entityMappings     = length(local.norm_entity_mappings[k]) > 0 ? local.norm_entity_mappings[k] : null
+                  # The service currently rejects more than one tactic per rule (live 400: "Only
+                  # one tactic is currently supported"), so only the FIRST authored tactic is sent;
+                  # authoring keeps the full list (the docs model tactics as a collection) and the
+                  # rules / mitre_coverage outputs report every authored tactic, ready to send them
+                  # all the day the API accepts them.
+                  tactics        = length(local.norm_mitre[k]) > 0 ? slice(local.norm_mitre[k], 0, 1) : null
+                  entityMappings = length(local.norm_entity_mappings[k]) > 0 ? local.norm_entity_mappings[k] : null
                 } : ak => av if av != null
               }
             },

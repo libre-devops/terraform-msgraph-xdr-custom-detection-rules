@@ -34,6 +34,8 @@ resource "msgraph_resource_action" "validate_queries" {
     schema = "schema"
   }
 
+  retry = var.retry_error_message_regex == null ? null : { error_message_regex = var.retry_error_message_regex }
+
   depends_on = [terraform_data.schema_guard]
 }
 
@@ -55,7 +57,21 @@ resource "msgraph_resource" "detection_rules" {
     status       = "status"
   }
 
-  depends_on = [terraform_data.schema_guard]
+  retry = var.retry_error_message_regex == null ? null : { error_message_regex = var.retry_error_message_regex }
+
+  # Rule deletion was observed hanging server side (live, via both the API and the portal), so the
+  # delete timeout keeps a wedged delete loud and bounded instead of spinning.
+  timeouts {
+    create = var.timeouts.create
+    delete = var.timeouts.delete
+    read   = var.timeouts.read
+    update = var.timeouts.update
+  }
+
+  # The validation actions must complete first: a rule whose query cannot resolve against the
+  # tenant must never deploy. Proven live, where a rule create raced its failing validation before
+  # this dependency existed.
+  depends_on = [terraform_data.schema_guard, msgraph_resource_action.validate_queries]
 }
 
 # MITRE roll ups for the coverage outputs (and the CI coverage report), read straight from the
@@ -63,7 +79,8 @@ resource "msgraph_resource" "detection_rules" {
 locals {
   rule_tactics = {
     for k, r in local.rules : k => distinct([
-      for m in try(concat(r.raw.alert.mitre, []), []) : try(tostring(m.tactic), "unknown")
+      for m in try(concat(r.raw.alert.mitre, []), []) :
+      lookup(local.tactic_canonical, replace(lower(try(tostring(m.tactic), "unknown")), "/[ _-]/", ""), try(tostring(m.tactic), "unknown"))
     ])
   }
 
@@ -71,7 +88,7 @@ locals {
     for k, r in local.rules : k => distinct(flatten([
       for m in try(concat(r.raw.alert.mitre, []), []) : [
         for t in try(concat(m.techniques, []), []) :
-        can(tostring(t)) ? [tostring(t)] : concat([try(tostring(t.technique), "unknown")], try(concat(t.sub_techniques, []), []))
+        can(tostring(t)) ? [upper(tostring(t))] : concat([try(upper(tostring(t.technique)), "unknown")], [for st in try(concat(t.sub_techniques, []), []) : try(upper(tostring(st)), "unknown")])
       ]
     ]))
   }

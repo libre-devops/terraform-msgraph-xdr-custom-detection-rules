@@ -56,7 +56,9 @@ module "detection_rules" {
       category     = "identity"
       display_name = "HCL authored canary (never matches)"
       frequency    = "PT24H"
-      query        = "AadSignInEventsBeta | where AccountUpn == \"ldo-never@example.invalid\" | project Timestamp, ReportId, AccountUpn, IPAddress"
+      # IdentityLogonEvents resolves in any XDR tenant's hunting schema; the Entra specific
+      # AadSignInEventsBeta does not (proven live), and portability is the catalog quality bar.
+      query = "IdentityLogonEvents | where AccountUpn == \"ldo-never@example.invalid\" | project Timestamp, ReportId, AccountUpn, IPAddress"
 
       alert = {
         severity = "informational"

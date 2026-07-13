@@ -34,10 +34,10 @@ output "rules" {
       category     = r.category
       display_name = try(tostring(r.raw.display_name), k)
       file         = r.file
-      frequency    = try(tostring(r.raw.frequency), null)
-      severity     = try(tostring(r.raw.alert.severity), null)
+      frequency    = try(upper(tostring(r.raw.frequency)), null)
+      severity     = try(lower(tostring(r.raw.alert.severity)), null)
       source       = r.source
-      status       = try(tostring(r.raw.status), "enabled")
+      status       = try(lower(tostring(r.raw.status)), "enabled")
       tactics      = local.rule_tactics[k]
       techniques   = local.rule_techniques[k]
     }

@@ -92,6 +92,15 @@ and duplicate rule ids across sources. The allowed shapes are extracted from the
 `schema/custom-detection.schema.json`, so editors with yaml-language-server flag mistakes while the
 analyst types, and CI can pre-check files with the same schema before Terraform runs.
 
+Values are also **normalised on a best endeavours basis**, because analysts author these files:
+keys stay strict (they are the schema contract editors autocomplete), values are forgiving.
+`status`, `severity` and `isolation_type` are case insensitive; `frequency` and technique ids
+uppercase themselves (`pt1h` becomes `PT1H`, `t1110` becomes `T1110`); tactics resolve case and
+separator insensitively (`credential access`, `credential-access` and `CredentialAccess` all
+deploy as `CredentialAccess`, and the British `DefenceEvasion` maps to the API's
+`DefenseEvasion`). Truly unknown values still fail the plan with the canonical list named, and
+the editor schema keeps nudging the canonical spellings.
+
 Two advisory checks warn without failing: a query that does not visibly return `Timestamp` and
 `ReportId` (custom detections must output them; rename projections can hide them from the token
 scan), and a rule with no MITRE mapping (it would vanish from coverage reporting).
@@ -104,6 +113,27 @@ Microsoft is removing the legacy detection rule properties on **2026-10-01** (`i
 techniques, `entityMappings`, and `automatedActions` from day one. Custom detection rules are beta
 only today, so `api_version` defaults to `beta`; it is a plain variable, so flip it to `v1.0` the
 day Microsoft promotes the API, without waiting for a module release.
+
+## Live API reality, encoded
+
+The beta docs and the live service disagree in places; every divergence below was hit on a real
+tenant and is now encoded in the module rather than left for you to find:
+
+- **One tactic per rule.** The docs model `tactics` as a collection; the service 400s on more than
+  one ("Only one tactic is currently supported"). Authoring keeps the full list, the body sends
+  only the first tactic, and the `rules` / `mitre_coverage` outputs report everything authored,
+  ready to send in full the day the API accepts it.
+- **Mail message mappings have a mandatory column combination.** Network message id, recipient and
+  sender must map together (a lesser pair 400s with "at least one mandatory field combination");
+  the validator enforces it and subject is recommended.
+- **Deletes can hang server side** (observed via both the API and the portal). The rule resource
+  carries a 10 minute delete timeout and transient error retries by default (`timeouts`,
+  `retry_error_message_regex`), so a wedged delete fails loudly instead of spinning.
+- **Portability is a catalog quality bar.** Catalog rules only use hunting tables that resolve in
+  any Defender XDR tenant (Device*, Email*, Identity*, CloudApp*). Entra specific tables like
+  `AadSignInEventsBeta` only resolve when that data flows into XDR, so a rule on them fails both
+  remote validation and the create elsewhere; the in graph validation catches this before anything
+  deploys, which is exactly its job.
 
 ## Automated response actions are a deliberate opt in
 
@@ -202,6 +232,8 @@ No modules.
 | <a name="input_remote_query_validation"></a> [remote\_query\_validation](#input\_remote\_query\_validation) | Run every rule's KQL against the tenant through the Graph runHuntingQuery action inside the<br/>Terraform graph, before the rule is created or updated. This proves tables and columns against the<br/>real advanced hunting schema server side (queries run verbatim by default; see<br/>remote\_validation\_append\_take), and the response schema (the query's output columns) is tracked in<br/>state. A query change replaces<br/>its validation action, so re-validation happens exactly when a query changes. The applying<br/>principal needs ThreatHunting.Read.All; set false to opt out (for example, a principal with only<br/>CustomDetection.ReadWrite.All). | `bool` | `true` | no |
 | <a name="input_remote_validation_append_take"></a> [remote\_validation\_append\_take](#input\_remote\_validation\_append\_take) | Append a trailing "\| take 1" to each remote validation query. Off by default on purpose: appending<br/>an operator can interact badly with queries that already end in a take or limit, or whose final<br/>operator matters, so the default runs every query verbatim and relies on the hunting endpoint's own<br/>server side result caps. Enable it deliberately when your queries tolerate a trailing take and you<br/>want validation to return as little data as possible. | `bool` | `false` | no |
 | <a name="input_remote_validation_timespan"></a> [remote\_validation\_timespan](#input\_remote\_validation\_timespan) | ISO 8601 timespan the remote validation queries look back over. Validation needs schema soundness,<br/>not data, so the default PT1H keeps the scanned window (and the tenant load) minimal; widen it if<br/>you want validation to double as a smoke test over real data. | `string` | `"PT1H"` | no |
+| <a name="input_retry_error_message_regex"></a> [retry\_error\_message\_regex](#input\_retry\_error\_message\_regex) | Regular expressions the provider retries on when a Graph call fails, applied to the detection rule<br/>resource and the validation actions. Transient service noise is retried by default; the provider<br/>retries matching errors with backoff until the operation timeout bounds it (the provider exposes no<br/>retry count knob, so the timeout is the ceiling). Set null to disable retries. | `list(string)` | <pre>[<br/>  "(?i)too many requests",<br/>  "(?i)service unavailable",<br/>  "(?i)internal server error",<br/>  "(?i)timeout",<br/>  "(?i)temporarily unavailable"<br/>]</pre> | no |
+| <a name="input_timeouts"></a> [timeouts](#input\_timeouts) | Operation timeouts for the detection rule resource. The delete default is 10 minutes because rule<br/>deletion was observed hanging server side (live, via both the API and the portal): a wedged delete<br/>now fails loudly at the timeout instead of spinning into the provider default, and transient errors<br/>retry per retry\_error\_message\_regex. | <pre>object({<br/>    create = optional(string, "10m")<br/>    delete = optional(string, "10m")<br/>    read   = optional(string, "5m")<br/>    update = optional(string, "10m")<br/>  })</pre> | `{}` | no |
 
 ## Outputs
 

@@ -1,37 +1,41 @@
 # yaml-language-server: $schema=../../schema/custom-detection.schema.json
 #
-# Successful sign-ins over legacy protocols that bypass modern auth controls. The AadSignInEventsBeta
-# table needs Entra ID P1/P2 reporting flowing into Defender XDR; where the table is not populated
-# the rule simply never matches.
-display_name: Successful sign-in over legacy authentication
+# Successful sign-ins over the NTLM legacy protocol. Built on IdentityLogonEvents on purpose: that
+# table resolves in any Defender XDR tenant's advanced hunting schema, where the Entra specific
+# sign-in tables (AadSignInEventsBeta) only resolve when Entra data flows into XDR, which is not
+# universal (proven live: a rule on that table fails both remote validation and the rule create in
+# tenants without it). Portability is a catalog quality bar.
+display_name: Successful sign-in over legacy NTLM authentication
 description: >-
-  An account signed in successfully using a legacy authentication client (POP, IMAP, SMTP AUTH, or
-  ActiveSync), protocols that sidestep MFA and modern conditional access and are a favourite for
-  credential stuffing.
+  An account signed in successfully using NTLM, a legacy protocol that sidesteps modern
+  authentication controls and is a favourite for relay and credential stuffing activity. Tune the
+  scope to your estate's expected NTLM baseline before enabling widely.
 status: enabled
 frequency: PT12H
 query: |
-  AadSignInEventsBeta
-  | where ErrorCode == 0
-  | where ClientAppUsed in~ ("Exchange ActiveSync", "IMAP4", "POP3", "SMTP Auth", "Authenticated SMTP", "Other clients")
-  | project Timestamp, ReportId, AccountUpn, AccountObjectId, IPAddress, Country, ClientAppUsed, UserAgent
+  IdentityLogonEvents
+  | where ActionType == "LogonSuccess"
+  | where Protocol =~ "Ntlm"
+  | project Timestamp, ReportId, AccountUpn, AccountSid, AccountDomain, IPAddress, DeviceName,
+      Application, Protocol
 alert:
   severity: medium
   recommended_actions: >-
-    Verify the sign-in with the account owner, then close the gap: block legacy authentication for
-    the account (or tenant wide) through conditional access and rotate the credential if the
-    activity is unexplained.
+    Confirm whether NTLM is expected for this account and source. Where it is not, trace the
+    authenticating application, plan the migration to modern authentication, and consider blocking
+    legacy protocols for the account.
   mitre:
     - tactic: InitialAccess
-      techniques: [T1078.004]
-    - tactic: DefenseEvasion
-      techniques: [T1562.008]
+      techniques: [T1078]
   custom_details:
-    Client: ClientAppUsed
-    Country: Country
+    Protocol: Protocol
+    Application: Application
   entity_mappings:
     accounts:
       - upn_column: AccountUpn
-        aad_user_id_column: AccountObjectId
+        sid_column: AccountSid
+        nt_domain_column: AccountDomain
+    hosts:
+      - name_column: DeviceName
     ips:
       - address_column: IPAddress

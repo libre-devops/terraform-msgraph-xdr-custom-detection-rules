@@ -34,6 +34,11 @@ run "baseline_deploys_by_default" {
   }
 
   assert {
+    condition     = length(msgraph_resource.detection_rules["office-app-spawns-encoded-powershell"].body.detectionAction.alertTemplate.tactics) == 1 && length(output.rules["office-app-spawns-encoded-powershell"].tactics) == 2
+    error_message = "Multi tactic authoring sends only the first tactic to the API but reports all of them in the outputs."
+  }
+
+  assert {
     condition     = output.rules_by_category["endpoint"] == tolist(["lsass-memory-dump-tooling", "office-app-spawns-encoded-powershell"])
     error_message = "Categories should derive from the catalog folder names."
   }
@@ -176,6 +181,74 @@ run "yaml_and_hcl_share_one_normaliser" {
   assert {
     condition     = output.rules["simple-signin-rule"].category == "identity" && output.rules["hcl-fixture"].category == "identity"
     error_message = "Category derives from the folder for files and the category attribute for HCL rules."
+  }
+}
+
+run "sloppy_values_normalise" {
+  command = plan
+
+  variables {
+    baseline_enabled = false
+    custom_rules = {
+      sloppy = {
+        display_name = "Sloppy but salvageable"
+        status       = "Enabled"
+        frequency    = "pt1h"
+        query        = "IdentityLogonEvents | project Timestamp, ReportId, AccountUpn"
+        alert = {
+          severity = "Medium"
+          mitre = [
+            { tactic = "credential access", techniques = ["t1110"] },
+            { tactic = "DefenceEvasion", techniques = [{ technique = "t1562", sub_techniques = ["t1562.008"] }] },
+          ]
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = msgraph_resource.detection_rules["sloppy"].body.status == "enabled"
+    error_message = "status should normalise to lowercase."
+  }
+
+  assert {
+    condition     = msgraph_resource.detection_rules["sloppy"].body.schedule.frequency == "PT1H"
+    error_message = "frequency should normalise to uppercase ISO 8601."
+  }
+
+  assert {
+    condition     = msgraph_resource.detection_rules["sloppy"].body.detectionAction.alertTemplate.severity == "medium"
+    error_message = "severity should normalise to lowercase."
+  }
+
+  assert {
+    condition     = msgraph_resource.detection_rules["sloppy"].body.detectionAction.alertTemplate.tactics[0].tactic == "CredentialAccess"
+    error_message = "A spaced lowercase tactic should canonicalise."
+  }
+
+  assert {
+    condition     = length(msgraph_resource.detection_rules["sloppy"].body.detectionAction.alertTemplate.tactics) == 1
+    error_message = "The body sends only the first tactic (live 400: only one tactic is currently supported)."
+  }
+
+  assert {
+    condition     = msgraph_resource.detection_rules["sloppy"].body.detectionAction.alertTemplate.tactics[0].techniques[0].technique == "T1110"
+    error_message = "Technique ids should uppercase."
+  }
+
+  assert {
+    condition     = contains(output.rules["sloppy"].tactics, "DefenseEvasion")
+    error_message = "Authoring keeps every tactic (British DefenceEvasion canonicalised) in the outputs even though the body sends one."
+  }
+
+  assert {
+    condition     = contains(output.rules["sloppy"].techniques, "T1562.008")
+    error_message = "Sub technique ids uppercase and roll into the outputs."
+  }
+
+  assert {
+    condition     = contains(keys(output.mitre_coverage.tactics), "CredentialAccess") && contains(keys(output.mitre_coverage.techniques), "T1110")
+    error_message = "Coverage outputs should roll up the canonical forms."
   }
 }
 
