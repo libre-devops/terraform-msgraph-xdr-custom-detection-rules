@@ -82,6 +82,11 @@ pwsh-analyze:
     }
     Write-Host 'PSScriptAnalyzer: clean.'
 
+# Validate every detection rule file (YAML schema + offline KQL syntax) with the helpers gate,
+# exactly as CI does. Needs LibreDevOpsHelpers >= 2.5.0 (just update-ldo-pwsh).
+detection-gate:
+    Import-Module LibreDevOpsHelpers -Force; Set-LdoLogFormat -Format Text; Clear-LdoFinding; foreach ($d in @('./catalog', './examples/minimal/custom-detections', './examples/complete/custom-detections')) { Invoke-LdoDetectionGate -Path $d -SchemaPath ./schema/custom-detection.schema.json }; Show-LdoFindingsSummary
+
 # Run the native terraform tests (plan-time, mocked provider, no cloud credentials).
 test:
     terraform init -backend=false -input=false | Out-Null
