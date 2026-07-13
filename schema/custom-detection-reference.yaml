@@ -1,0 +1,186 @@
+# =================================================================================================
+# Custom detection rule, annotated reference
+# =================================================================================================
+# Every field the analyst authoring schema accepts, with defaults, allowed values, and the live API
+# caveats the module encodes. The machine contract is custom-detection.schema.json (editors get it
+# through the yaml-language-server modeline); this file is the human companion. One rule per file,
+# under custom-detections/<category>/, where the first level folder is the category.
+#
+# Values are normalised best endeavours: status, severity and isolation types are case insensitive;
+# frequency and technique ids uppercase themselves (pt1h, t1110); tactics resolve case and
+# separator insensitively (credential access, credential-access, CredentialAccess) and the British
+# DefenceEvasion maps to the API's DefenseEvasion. KEYS are strict: unknown keys fail the plan.
+# =================================================================================================
+
+# --- Identity ------------------------------------------------------------------------------------
+
+id: "my-rule-id" # Optional. Defaults to the file name without extension. Client provided on
+#   create and doubles as the Terraform key (letters, digits, dots, underscores,
+#   hyphens; 128 max). Rules EXPORTED from a tenant keep the server assigned id
+#   on purpose, so terraform import addresses and later plans line up; rules
+#   authored new should omit this and let the file name be the id.
+
+category: "identity" # Optional. Overrides the folder derived category (files) and names the
+#   category for HCL authored rules. Grouping for humans and the
+#   rules_by_category / mitre_coverage outputs only; never sent to the API.
+
+display_name: "My detection rule" # REQUIRED. The rule's name in the Defender portal.
+
+description: >- # Optional but recommended. Defaults into the alert description when
+  What this rule finds and why # alert.description is not set.
+  it matters.
+
+# --- Behaviour -----------------------------------------------------------------------------------
+
+status: enabled # Optional, default enabled. enabled | disabled. Park a rule disabled for
+#   tuning without deleting it (baseline_overrides can do this per rule too).
+
+frequency: PT1H # REQUIRED. ISO 8601: PT0S (Continuous, near real time), PT1H, PT3H,
+#   PT12H, PT24H (P1D accepted). Validated against the module's
+#   allowed_frequencies input, which organisations can narrow.
+
+query: | # REQUIRED. The advanced hunting KQL. Must return Timestamp, ReportId and
+  DeviceProcessEvents # at least one impacted entity column (DeviceId, AccountObjectId,
+  | where FileName =~ "x.exe" # RecipientEmailAddress, ...). PORTABILITY: prefer tables that resolve in
+  | project Timestamp, ReportId, # any Defender XDR tenant (Device*, Email*, Identity*, CloudApp*); Entra
+      DeviceId, DeviceName # specific tables like AadSignInEventsBeta fail validation and create in
+#   tenants without that data. Validated offline (Kusto.Language) in CI and
+#   against the tenant's real schema in graph at apply (runHuntingQuery).
+
+# --- The alert -----------------------------------------------------------------------------------
+
+alert: # REQUIRED.
+  title: "My detection rule" # Optional. Defaults to display_name.
+  description: "..." # Optional. Defaults to the rule description, then display_name.
+  severity: medium # REQUIRED. informational | low | medium | high.
+  recommended_actions: >- # Optional. Analyst guidance shown on the alert.
+    Steps to take.
+
+  mitre: # Optional list of ATT&CK mappings. LIVE API LIMIT: the service accepts
+    - tactic: Execution #   ONE tactic per rule today ("Only one tactic is currently supported"),
+      techniques: #   so the module sends only the FIRST entry; author every relevant tactic
+        - T1059 #   anyway, the outputs report them all, ready for the day the API accepts
+        - technique: T1059 #   multiples. Techniques are strings, or mappings when sub techniques
+          sub_techniques: #   are wanted. Formats: T1059 or T1059.001 (sub techniques always
+            - T1059.001 #   T1059.001 form). Tactics: the 14 enterprise tactics.
+
+  custom_details: # Optional. Detail name to QUERY COLUMN name; keys pass through untouched
+    CommandLine: ProcessCommandLine # (they are display labels), values must be columns the query returns.
+
+  entity_mappings: # Optional. Map query columns to alert entities; every group and column
+    accounts: #   below comes from the Graph metadata. At least one mapping is strongly
+      - aad_user_id_column: "" #   recommended (the SOAR enrichment feeds on entities).
+        dns_domain_column: ""
+        name_column: ""
+        nt_domain_column: ""
+        sid_column: ""
+        upn_column: ""
+        upn_suffix_column: ""
+    amazon_resources:
+      - amazon_resource_id_column: ""
+    azure_resources:
+      - resource_id_column: ""
+    cloud_applications:
+      - app_id_column: ""
+        name_column: ""
+    dns:
+      - domain_name_column: ""
+        host_ip_address_column: ""
+        server_ip_column: ""
+    files:
+      - name_column: ""
+        sha1_column: ""
+        sha256_column: ""
+    google_cloud_resources:
+      - full_resource_name_column: ""
+    hosts:
+      - device_id_column: ""
+        dns_domain_column: ""
+        name_column: ""
+        net_bios_name_column: ""
+        nt_domain_column: ""
+    ips:
+      - address_column: ""
+        scope_column: ""
+    mail_clusters:
+      - query_column: ""
+        source_column: ""
+    mail_messages: # LIVE API RULE: network_message_id_column, recipient_column and
+      - network_message_id_column: "" #   sender_column must map TOGETHER (a lesser pair is rejected with
+        recipient_column: "" #   "at least one mandatory field combination"); subject_column is
+        sender_column: "" #   recommended to complete the proven shape.
+        subject_column: ""
+    mailboxes:
+      - primary_address_column: ""
+    oauth_applications:
+      - oauth_app_id_column: ""
+    processes:
+      - sha1_column: ""
+        sha256_column: ""
+    registry_values:
+      - key_column: ""
+        value_name_column: ""
+    security_groups:
+      - distinguished_name_column: ""
+        object_id_column: ""
+        sid_column: ""
+    urls:
+      - address_column: ""
+
+# --- Scoping and response ------------------------------------------------------------------------
+
+device_groups: # Optional. Restrict the rule to these device groups (organizationalScope).
+  - Workstations-Corp
+
+automated_actions: # Optional and GATED: these act on real assets when the rule fires, so the
+  #   module refuses every rule carrying them until the call sets
+  #   allow_automated_actions = true. Column attributes name query columns that
+  #   identify the target assets.
+  isolate_devices:
+    - device_id_column: DeviceId
+      isolation_type: full # full | selective.
+  collect_investigation_packages:
+    - device_id_column: DeviceId
+  initiate_investigations:
+    - device_id_column: DeviceId
+  restrict_app_executions:
+    - device_id_column: DeviceId
+  run_antivirus_scans:
+    - device_id_column: DeviceId
+  allow_files:
+    - sha1_column: SHA1
+      sha256_column: SHA256
+      device_group_names: [Workstations-Corp] # Scope of the allow.
+  block_files:
+    - sha1_column: SHA1
+      sha256_column: SHA256
+      device_group_names: [Workstations-Corp]
+  stop_and_quarantine_files:
+    - device_id_column: DeviceId
+      sha1_column: SHA1
+  disable_users:
+    - account_sid_column: AccountSid
+  force_user_password_resets:
+    - account_sid_column: AccountSid
+  mark_users_as_compromised:
+    - account_object_id_column: AccountObjectId
+  move_emails_to_junk:
+    - network_message_id_column: NetworkMessageId
+      recipient_column: RecipientEmailAddress
+  move_emails_to_inbox:
+    - network_message_id_column: NetworkMessageId
+      recipient_column: RecipientEmailAddress
+  move_emails_to_deleted_items:
+    - network_message_id_column: NetworkMessageId
+      recipient_column: RecipientEmailAddress
+  soft_delete_emails:
+    - network_message_id_column: NetworkMessageId
+      recipient_column: RecipientEmailAddress
+  hard_delete_emails:
+    - network_message_id_column: NetworkMessageId
+      recipient_column: RecipientEmailAddress
+
+# --- Escape hatch --------------------------------------------------------------------------------
+
+extra_body: {} # Optional. Raw Graph shaped attributes merged over the generated body last,
+#   for API surface this module does not model yet. Expert use only.

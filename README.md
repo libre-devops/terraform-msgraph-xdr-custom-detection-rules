@@ -79,7 +79,16 @@ device_groups: [Workstations-Corp]   # optional scoping
 The same schema works as HCL through `custom_rules` for rules a stack composes or generates, and
 the module's own `catalog/` baseline uses it too: one validator, one normaliser, three sources,
 **deployed simultaneously** (YAML directory, HCL rules and the baseline coexist in one call; rule
-ids must be unique across all three, and the plan names any collision).
+ids must be unique across all three, and the plan names any collision). Alongside the machine
+schema, [`schema/custom-detection-reference.yaml`](./schema/custom-detection-reference.yaml) is
+the annotated human companion: every field with its defaults, allowed values, and the live API
+caveats, ready to copy from.
+
+**Brownfield tenants adopt in two commands** (LibreDevOpsHelpers 2.6.0+):
+`Export-LdoCustomDetectionRule -OutDir ./custom-detections` turns every hand made rule in the
+tenant into these YAML files (server ids kept so plans line up; legacy shapes converted best
+endeavours with TODO comments), then after a plan,
+`Invoke-LdoTerraformGraphImportFromPlan -PlanJson ./plan.json` imports them all into state.
 
 ## Every field checked, every error named
 
