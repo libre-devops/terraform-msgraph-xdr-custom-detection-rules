@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=../../schema/custom-detection.schema.json
+#
+# Classic phishing payload execution: an Office application spawning PowerShell with an encoded
+# command. Low noise on almost every estate, high signal when it fires.
+display_name: Office application spawns encoded PowerShell
+description: >-
+  An Office application (Word, Excel, PowerPoint, or Outlook) launched PowerShell with an encoded
+  command line, a common pattern for phishing driven code execution.
+status: enabled
+frequency: PT1H
+query: |
+  DeviceProcessEvents
+  | where InitiatingProcessFileName in~ ("winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe")
+  | where FileName in~ ("powershell.exe", "pwsh.exe")
+  | where ProcessCommandLine has_any ("-enc", "-encodedcommand", "-ec")
+  | project Timestamp, ReportId, DeviceId, DeviceName, AccountName, AccountDomain, AccountSid,
+      FileName, SHA1, SHA256, ProcessCommandLine, InitiatingProcessFileName
+alert:
+  severity: high
+  recommended_actions: >-
+    Investigate the parent Office document and the decoded command line. If malicious, isolate the
+    device from the Defender portal and review the user's recent email for the delivery vector.
+  mitre:
+    - tactic: Execution
+      techniques: [T1059.001]
+    - tactic: InitialAccess
+      techniques: [T1566.001]
+  custom_details:
+    CommandLine: ProcessCommandLine
+    ParentProcess: InitiatingProcessFileName
+  entity_mappings:
+    hosts:
+      - device_id_column: DeviceId
+        name_column: DeviceName
+    accounts:
+      - name_column: AccountName
+        nt_domain_column: AccountDomain
+        sid_column: AccountSid
+    files:
+      - name_column: FileName
+        sha1_column: SHA1
+        sha256_column: SHA256

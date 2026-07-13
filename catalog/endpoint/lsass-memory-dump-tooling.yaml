@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=../../schema/custom-detection.schema.json
+#
+# Credential dumping against LSASS with living-off-the-land tooling. The command line filter keeps
+# it to the deliberate dump patterns rather than every handle open.
+display_name: LSASS memory dump via known tooling
+description: >-
+  A process attempted to dump LSASS memory using procdump, rundll32 with comsvcs MiniDump, or Task
+  Manager style dumping, the standard prelude to offline credential theft.
+status: enabled
+frequency: PT1H
+query: |
+  DeviceProcessEvents
+  | where FileName in~ ("procdump.exe", "procdump64.exe", "rundll32.exe")
+  | where ProcessCommandLine has "lsass"
+  | where ProcessCommandLine has_any ("-ma", "comsvcs", "MiniDump")
+  | project Timestamp, ReportId, DeviceId, DeviceName, AccountName, AccountDomain, AccountSid,
+      FileName, SHA1, SHA256, ProcessCommandLine
+alert:
+  severity: high
+  recommended_actions: >-
+    Treat as hands on keyboard activity until proven otherwise. Check for follow on lateral
+    movement from this device and force a credential reset for the signed in account after
+    containment.
+  mitre:
+    - tactic: CredentialAccess
+      techniques:
+        - technique: T1003
+          sub_techniques: [T1003.001]
+  custom_details:
+    CommandLine: ProcessCommandLine
+  entity_mappings:
+    hosts:
+      - device_id_column: DeviceId
+        name_column: DeviceName
+    accounts:
+      - name_column: AccountName
+        nt_domain_column: AccountDomain
+        sid_column: AccountSid
+    processes:
+      - sha1_column: SHA1
+        sha256_column: SHA256

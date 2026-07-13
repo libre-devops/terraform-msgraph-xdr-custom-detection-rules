@@ -1,0 +1,16 @@
+# Deliberately wrong in several independent ways; every one must surface in the same plan failure.
+display_name: Fixture with every mistake
+statuss: enabled
+frequency: PT7M
+query: |
+  DeviceProcessEvents | project Timestamp
+alert:
+  severity: critical
+  mitre:
+    - tactic: NotATactic
+      techniques: [T99]
+  entity_mappings:
+    accounts:
+      - upn_field: AccountUpn
+    wizards:
+      - wand_column: WandName

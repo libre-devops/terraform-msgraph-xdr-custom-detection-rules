@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../../../../../schema/custom-detection.schema.json
+#
+# Living-off-the-land ingress: certutil pulling remote content. Demonstrates device group scoping
+# and custom details on an analyst authored rule.
+display_name: Certutil used to download remote content
+description: >-
+  certutil.exe fetched content from a URL, a signed binary proxy technique for pulling tooling or
+  payloads onto a device.
+status: enabled
+frequency: PT3H
+device_groups:
+  - Workstations-Corp
+query: |
+  DeviceProcessEvents
+  | where FileName =~ "certutil.exe"
+  | where ProcessCommandLine has_any ("urlcache", "-split", "verifyctl")
+  | where ProcessCommandLine has "http"
+  | project Timestamp, ReportId, DeviceId, DeviceName, AccountName, AccountDomain, AccountSid,
+      FileName, SHA256, ProcessCommandLine
+alert:
+  severity: medium
+  recommended_actions: >-
+    Recover the downloaded content from the device timeline and detonate it. Treat the device as
+    suspect until the source URL is explained.
+  mitre:
+    - tactic: CommandAndControl
+      techniques: [T1105]
+    - tactic: DefenseEvasion
+      techniques:
+        - technique: T1218
+  custom_details:
+    CommandLine: ProcessCommandLine
+  entity_mappings:
+    hosts:
+      - device_id_column: DeviceId
+        name_column: DeviceName
+    accounts:
+      - name_column: AccountName
+        nt_domain_column: AccountDomain
+        sid_column: AccountSid
+    files:
+      - name_column: FileName
+        sha256_column: SHA256

@@ -1,0 +1,17 @@
+display_name: Fixture rule carrying automated actions
+frequency: PT24H
+query: |
+  DeviceProcessEvents
+  | where FileName == "fixture-never-matches.exe"
+  | project Timestamp, ReportId, DeviceId
+alert:
+  severity: informational
+  mitre:
+    - tactic: Execution
+      techniques: [T1204]
+automated_actions:
+  run_antivirus_scans:
+    - device_id_column: DeviceId
+  isolate_devices:
+    - device_id_column: DeviceId
+      isolation_type: selective

@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=../../schema/custom-detection.schema.json
+#
+# Bulk exfiltration behaviour through sanctioned cloud apps: one user downloading an unusual volume
+# of files inside the rule window. Tune the threshold to the estate's normal.
+display_name: Mass file download by a single user
+description: >-
+  A single user downloaded more than 100 files from cloud applications inside the rule window,
+  which can indicate staging for exfiltration or an account takeover harvesting documents.
+status: enabled
+frequency: PT3H
+query: |
+  CloudAppEvents
+  | where ActionType == "FileDownloaded"
+  | summarize DownloadCount = count(), arg_max(Timestamp, ReportId, IPAddress, Application, ApplicationId) by AccountObjectId, AccountDisplayName
+  | where DownloadCount > 100
+  | project Timestamp, ReportId, AccountObjectId, AccountDisplayName, IPAddress, Application,
+      ApplicationId, DownloadCount
+alert:
+  severity: medium
+  recommended_actions: >-
+    Establish whether the volume is explained (migration, backup tooling, offboarding). If not,
+    review the session's other activity in the cloud app portal and consider revoking sessions and
+    marking the user compromised.
+  mitre:
+    - tactic: Exfiltration
+      techniques: [T1567]
+    - tactic: Collection
+      techniques: [T1213]
+  custom_details:
+    Downloads: DownloadCount
+    Application: Application
+  entity_mappings:
+    accounts:
+      - aad_user_id_column: AccountObjectId
+        name_column: AccountDisplayName
+    cloud_applications:
+      - app_id_column: ApplicationId
+        name_column: Application
+    ips:
+      - address_column: IPAddress

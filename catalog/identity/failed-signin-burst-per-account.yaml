@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../../schema/custom-detection.schema.json
+#
+# Brute force and password spray behaviour: one account accumulating a burst of failed logons
+# inside a single schedule window. arg_max carries the newest Timestamp and ReportId through the
+# summarize, which custom detections require in the results.
+display_name: Failed sign-in burst against one account
+description: >-
+  More than 25 failed logons for a single account inside the rule window, the shape of brute force
+  or password spray activity against that identity.
+status: enabled
+frequency: PT1H
+query: |
+  IdentityLogonEvents
+  | where ActionType == "LogonFailed"
+  | summarize FailedCount = count(), arg_max(Timestamp, ReportId, IPAddress, AccountSid, AccountDomain) by AccountUpn
+  | where FailedCount > 25
+  | project Timestamp, ReportId, AccountUpn, AccountSid, AccountDomain, IPAddress, FailedCount
+alert:
+  severity: medium
+  recommended_actions: >-
+    Confirm whether the source IP is expected for this account. On a genuine spray, block the
+    source, reset the credential if any attempt succeeded, and review conditional access coverage
+    for the account.
+  mitre:
+    - tactic: CredentialAccess
+      techniques:
+        - technique: T1110
+          sub_techniques: [T1110.001, T1110.003]
+  custom_details:
+    FailedAttempts: FailedCount
+  entity_mappings:
+    accounts:
+      - upn_column: AccountUpn
+        sid_column: AccountSid
+        nt_domain_column: AccountDomain
+    ips:
+      - address_column: IPAddress

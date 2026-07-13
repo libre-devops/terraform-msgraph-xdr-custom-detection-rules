@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../../../../schema/custom-detection.schema.json
+#
+# A live-safe canary: syntactically and semantically a real custom detection, but the file name it
+# hunts for cannot exist, so the rule deploys, schedules and never raises an alert.
+display_name: Libre DevOps E2E canary (never matches)
+description: >-
+  Deployment canary for the detection rules module. The query can never match, so this rule proves
+  the create, update and delete paths without generating alerts.
+status: enabled
+frequency: PT24H
+query: |
+  DeviceProcessEvents
+  | where FileName == "ldo-e2e-canary-that-never-matches.exe"
+  | project Timestamp, ReportId, DeviceId, DeviceName
+alert:
+  severity: informational
+  mitre:
+    - tactic: Execution
+      techniques: [T1204]
+  entity_mappings:
+    hosts:
+      - device_id_column: DeviceId
+        name_column: DeviceName

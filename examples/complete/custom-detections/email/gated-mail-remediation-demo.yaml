@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../../../schema/custom-detection.schema.json
+#
+# Demonstrates the automated actions surface behind the allow_automated_actions gate. Doubly inert
+# on purpose: the rule is disabled AND the query matches nothing, so a live apply proves the shape
+# without arming anything.
+display_name: Gated automated mail remediation (demo, disabled)
+description: >-
+  Shape demo for automated response actions: soft delete a delivered message identified by the
+  detection query. Disabled and unmatchable by construction.
+status: disabled
+frequency: PT24H
+query: |
+  EmailEvents
+  | where Subject == "ldo-demo-subject-that-never-matches-2f6c1b"
+  | project Timestamp, ReportId, NetworkMessageId, RecipientEmailAddress
+alert:
+  severity: informational
+  mitre:
+    - tactic: InitialAccess
+      techniques: [T1566]
+  entity_mappings:
+    mail_messages:
+      - network_message_id_column: NetworkMessageId
+        recipient_column: RecipientEmailAddress
+automated_actions:
+  soft_delete_emails:
+    - network_message_id_column: NetworkMessageId
+      recipient_column: RecipientEmailAddress

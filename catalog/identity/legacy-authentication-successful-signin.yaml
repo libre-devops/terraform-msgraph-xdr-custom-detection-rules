@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../../schema/custom-detection.schema.json
+#
+# Successful sign-ins over legacy protocols that bypass modern auth controls. The AadSignInEventsBeta
+# table needs Entra ID P1/P2 reporting flowing into Defender XDR; where the table is not populated
+# the rule simply never matches.
+display_name: Successful sign-in over legacy authentication
+description: >-
+  An account signed in successfully using a legacy authentication client (POP, IMAP, SMTP AUTH, or
+  ActiveSync), protocols that sidestep MFA and modern conditional access and are a favourite for
+  credential stuffing.
+status: enabled
+frequency: PT12H
+query: |
+  AadSignInEventsBeta
+  | where ErrorCode == 0
+  | where ClientAppUsed in~ ("Exchange ActiveSync", "IMAP4", "POP3", "SMTP Auth", "Authenticated SMTP", "Other clients")
+  | project Timestamp, ReportId, AccountUpn, AccountObjectId, IPAddress, Country, ClientAppUsed, UserAgent
+alert:
+  severity: medium
+  recommended_actions: >-
+    Verify the sign-in with the account owner, then close the gap: block legacy authentication for
+    the account (or tenant wide) through conditional access and rotate the credential if the
+    activity is unexplained.
+  mitre:
+    - tactic: InitialAccess
+      techniques: [T1078.004]
+    - tactic: DefenseEvasion
+      techniques: [T1562.008]
+  custom_details:
+    Client: ClientAppUsed
+    Country: Country
+  entity_mappings:
+    accounts:
+      - upn_column: AccountUpn
+        aad_user_id_column: AccountObjectId
+    ips:
+      - address_column: IPAddress

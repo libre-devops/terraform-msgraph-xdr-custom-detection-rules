@@ -1,0 +1,22 @@
+display_name: Fixture sign-in rule
+description: Valid fixture exercising entity mappings, MITRE nesting and custom details.
+status: enabled
+frequency: PT1H
+query: |
+  AadSignInEventsBeta
+  | where ErrorCode == 0
+  | project Timestamp, ReportId, AccountUpn, IPAddress
+alert:
+  severity: low
+  mitre:
+    - tactic: InitialAccess
+      techniques:
+        - technique: T1078
+          sub_techniques: [T1078.004]
+  custom_details:
+    SourceIp: IPAddress
+  entity_mappings:
+    accounts:
+      - upn_column: AccountUpn
+    ips:
+      - address_column: IPAddress
