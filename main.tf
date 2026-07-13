@@ -26,7 +26,7 @@ resource "msgraph_resource_action" "validate_queries" {
   api_version  = var.hunting_api_version
 
   body = {
-    Query    = "${each.value.queryCondition.queryText}\n| take 1"
+    Query    = var.remote_validation_append_take ? "${each.value.queryCondition.queryText}\n| take 1" : each.value.queryCondition.queryText
     Timespan = var.remote_validation_timespan
   }
 

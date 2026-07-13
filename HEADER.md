@@ -132,10 +132,13 @@ are stable, and `id_prefix` namespaces everything a call owns for side by side d
    feedback on pull requests before anything touches the tenant.
 4. **Apply, in graph**: `remote_query_validation` (on by default) runs every rule's query against
    the tenant's real advanced hunting schema through the Graph v1.0 `security/runHuntingQuery`
-   action, inside the Terraform graph and before the rule resource itself, with `| take 1`
-   appended so no meaningful data returns. The response schema (the query's output columns) is
-   tracked in state, and a query change replaces its validation action, so re-validation happens
-   exactly when a query changes. A missing table or column fails the apply with the rule named.
+   action, inside the Terraform graph and before the rule resource itself. Queries run **verbatim**
+   by default (the endpoint caps result sizes server side); `remote_validation_append_take` can
+   append a trailing `| take 1` for queries that tolerate it, off by default because appending an
+   operator can interact badly with a query that already ends in one. The response schema (the
+   query's output columns) is tracked in state, and a query change replaces its validation action,
+   so re-validation happens exactly when a query changes. A missing table or column fails the
+   apply with the rule named.
 5. **Apply, the create**: the Graph detection rule create is the final authority (it validates the
    query and the required result columns server side).
 

@@ -142,14 +142,27 @@ variable "remote_query_validation" {
   description = <<DESC
 Run every rule's KQL against the tenant through the Graph runHuntingQuery action inside the
 Terraform graph, before the rule is created or updated. This proves tables and columns against the
-real advanced hunting schema server side (with `| take 1` appended so no meaningful data returns),
-and the response schema (the query's output columns) is tracked in state. A query change replaces
+real advanced hunting schema server side (queries run verbatim by default; see
+remote_validation_append_take), and the response schema (the query's output columns) is tracked in
+state. A query change replaces
 its validation action, so re-validation happens exactly when a query changes. The applying
 principal needs ThreatHunting.Read.All; set false to opt out (for example, a principal with only
 CustomDetection.ReadWrite.All).
 DESC
   type        = bool
   default     = true
+}
+
+variable "remote_validation_append_take" {
+  description = <<DESC
+Append a trailing "| take 1" to each remote validation query. Off by default on purpose: appending
+an operator can interact badly with queries that already end in a take or limit, or whose final
+operator matters, so the default runs every query verbatim and relies on the hunting endpoint's own
+server side result caps. Enable it deliberately when your queries tolerate a trailing take and you
+want validation to return as little data as possible.
+DESC
+  type        = bool
+  default     = false
 }
 
 variable "remote_validation_timespan" {

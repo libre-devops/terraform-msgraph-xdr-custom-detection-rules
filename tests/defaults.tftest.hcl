@@ -49,13 +49,26 @@ run "baseline_deploys_by_default" {
   }
 
   assert {
-    condition     = endswith(msgraph_resource_action.validate_queries["office-app-spawns-encoded-powershell"].body.Query, "| take 1")
-    error_message = "Validation queries should cap the result set with a trailing take 1."
+    condition     = !endswith(msgraph_resource_action.validate_queries["office-app-spawns-encoded-powershell"].body.Query, "| take 1")
+    error_message = "Validation queries run verbatim by default; nothing is appended unless remote_validation_append_take is set."
   }
 
   assert {
     condition     = msgraph_resource_action.validate_queries["office-app-spawns-encoded-powershell"].body.Timespan == "PT1H"
     error_message = "Validation queries should use the configured lookback timespan."
+  }
+}
+
+run "remote_validation_take_append_opt_in" {
+  command = plan
+
+  variables {
+    remote_validation_append_take = true
+  }
+
+  assert {
+    condition     = endswith(msgraph_resource_action.validate_queries["office-app-spawns-encoded-powershell"].body.Query, "| take 1")
+    error_message = "With remote_validation_append_take on, validation queries gain a trailing take 1."
   }
 }
 

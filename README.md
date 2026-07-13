@@ -132,10 +132,13 @@ are stable, and `id_prefix` namespaces everything a call owns for side by side d
    feedback on pull requests before anything touches the tenant.
 4. **Apply, in graph**: `remote_query_validation` (on by default) runs every rule's query against
    the tenant's real advanced hunting schema through the Graph v1.0 `security/runHuntingQuery`
-   action, inside the Terraform graph and before the rule resource itself, with `| take 1`
-   appended so no meaningful data returns. The response schema (the query's output columns) is
-   tracked in state, and a query change replaces its validation action, so re-validation happens
-   exactly when a query changes. A missing table or column fails the apply with the rule named.
+   action, inside the Terraform graph and before the rule resource itself. Queries run **verbatim**
+   by default (the endpoint caps result sizes server side); `remote_validation_append_take` can
+   append a trailing `| take 1` for queries that tolerate it, off by default because appending an
+   operator can interact badly with a query that already ends in one. The response schema (the
+   query's output columns) is tracked in state, and a query change replaces its validation action,
+   so re-validation happens exactly when a query changes. A missing table or column fails the
+   apply with the rule named.
 5. **Apply, the create**: the Graph detection rule create is the final authority (it validates the
    query and the required result columns server side).
 
@@ -196,7 +199,8 @@ No modules.
 | <a name="input_custom_rules"></a> [custom\_rules](#input\_custom\_rules) | Detection rules authored directly in HCL, keyed by rule id, using exactly the same schema as the<br/>YAML files (display\_name, query, frequency, alert {severity, mitre, entity\_mappings, ...},<br/>device\_groups, automated\_actions, extra\_body; a category attribute is also accepted since HCL rules<br/>have no folder to derive it from). YAML files are the analyst path; this input exists for rules<br/>that are generated or composed by the calling stack. Validated by the same engine as the files. | `any` | `{}` | no |
 | <a name="input_hunting_api_version"></a> [hunting\_api\_version](#input\_hunting\_api\_version) | Microsoft Graph API version for the remote query validation calls (security/runHuntingQuery).<br/>Defaults to v1.0, where the hunting API is generally available; independent of api\_version because<br/>the detection rule API and the hunting API promote separately. | `string` | `"v1.0"` | no |
 | <a name="input_id_prefix"></a> [id\_prefix](#input\_id\_prefix) | Optional prefix prepended to every rule id (baseline and custom), namespacing the rules this module<br/>call owns, for example per environment or per stack ("soc-dev-"). The rule id is client provided on<br/>create and doubles as the Terraform key, so the prefix keeps parallel deployments from colliding.<br/>Null applies no prefix. | `string` | `null` | no |
-| <a name="input_remote_query_validation"></a> [remote\_query\_validation](#input\_remote\_query\_validation) | Run every rule's KQL against the tenant through the Graph runHuntingQuery action inside the<br/>Terraform graph, before the rule is created or updated. This proves tables and columns against the<br/>real advanced hunting schema server side (with `| take 1` appended so no meaningful data returns),<br/>and the response schema (the query's output columns) is tracked in state. A query change replaces<br/>its validation action, so re-validation happens exactly when a query changes. The applying<br/>principal needs ThreatHunting.Read.All; set false to opt out (for example, a principal with only<br/>CustomDetection.ReadWrite.All). | `bool` | `true` | no |
+| <a name="input_remote_query_validation"></a> [remote\_query\_validation](#input\_remote\_query\_validation) | Run every rule's KQL against the tenant through the Graph runHuntingQuery action inside the<br/>Terraform graph, before the rule is created or updated. This proves tables and columns against the<br/>real advanced hunting schema server side (queries run verbatim by default; see<br/>remote\_validation\_append\_take), and the response schema (the query's output columns) is tracked in<br/>state. A query change replaces<br/>its validation action, so re-validation happens exactly when a query changes. The applying<br/>principal needs ThreatHunting.Read.All; set false to opt out (for example, a principal with only<br/>CustomDetection.ReadWrite.All). | `bool` | `true` | no |
+| <a name="input_remote_validation_append_take"></a> [remote\_validation\_append\_take](#input\_remote\_validation\_append\_take) | Append a trailing "\| take 1" to each remote validation query. Off by default on purpose: appending<br/>an operator can interact badly with queries that already end in a take or limit, or whose final<br/>operator matters, so the default runs every query verbatim and relies on the hunting endpoint's own<br/>server side result caps. Enable it deliberately when your queries tolerate a trailing take and you<br/>want validation to return as little data as possible. | `bool` | `false` | no |
 | <a name="input_remote_validation_timespan"></a> [remote\_validation\_timespan](#input\_remote\_validation\_timespan) | ISO 8601 timespan the remote validation queries look back over. Validation needs schema soundness,<br/>not data, so the default PT1H keeps the scanned window (and the tenant load) minimal; widen it if<br/>you want validation to double as a smoke test over real data. | `string` | `"PT1H"` | no |
 
 ## Outputs
