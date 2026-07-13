@@ -42,6 +42,39 @@ run "baseline_deploys_by_default" {
     condition     = contains(keys(output.mitre_coverage.techniques), "T1566.001")
     error_message = "MITRE coverage should roll techniques up across rules."
   }
+
+  assert {
+    condition     = length(msgraph_resource_action.validate_queries) == 6
+    error_message = "Remote query validation is on by default: one runHuntingQuery action per rule."
+  }
+
+  assert {
+    condition     = endswith(msgraph_resource_action.validate_queries["office-app-spawns-encoded-powershell"].body.Query, "| take 1")
+    error_message = "Validation queries should cap the result set with a trailing take 1."
+  }
+
+  assert {
+    condition     = msgraph_resource_action.validate_queries["office-app-spawns-encoded-powershell"].body.Timespan == "PT1H"
+    error_message = "Validation queries should use the configured lookback timespan."
+  }
+}
+
+run "remote_validation_opt_out" {
+  command = plan
+
+  variables {
+    remote_query_validation = false
+  }
+
+  assert {
+    condition     = length(msgraph_resource_action.validate_queries) == 0
+    error_message = "remote_query_validation = false should deploy no validation actions."
+  }
+
+  assert {
+    condition     = length(msgraph_resource.detection_rules) == 6
+    error_message = "Opting out of remote validation should not affect the rules themselves."
+  }
 }
 
 run "overrides_tune_and_drop" {

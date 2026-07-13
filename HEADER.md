@@ -12,7 +12,7 @@
   </a>
 </div>
 
-# Terraform MSGraph Detection Rules
+# Terraform MSGraph XDR Custom Detection Rules
 
 Microsoft Defender XDR **custom detection rules as code**: analysts author one YAML file per rule,
 Terraform validates every field at plan time and deploys through the Microsoft Graph
@@ -22,10 +22,10 @@ A curated baseline ships in the box (the same catalog and engine shape as the Li
 and Sentinel workbook modules), and destructive automated response actions sit behind an explicit
 gate.
 
-[![CI](https://github.com/libre-devops/terraform-msgraph-detection-rules/actions/workflows/ci.yml/badge.svg)](https://github.com/libre-devops/terraform-msgraph-detection-rules/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/libre-devops/terraform-msgraph-detection-rules?sort=semver&label=release)](https://github.com/libre-devops/terraform-msgraph-detection-rules/releases/latest)
+[![CI](https://github.com/libre-devops/terraform-msgraph-xdr-custom-detection-rules/actions/workflows/ci.yml/badge.svg)](https://github.com/libre-devops/terraform-msgraph-xdr-custom-detection-rules/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/libre-devops/terraform-msgraph-xdr-custom-detection-rules?sort=semver&label=release)](https://github.com/libre-devops/terraform-msgraph-xdr-custom-detection-rules/releases/latest)
 [![Terraform Registry](https://img.shields.io/badge/registry-libre--devops-7B42BC?logo=terraform&logoColor=white)](https://registry.terraform.io/namespaces/libre-devops)
-[![License](https://img.shields.io/github/license/libre-devops/terraform-msgraph-detection-rules)](./LICENSE)
+[![License](https://img.shields.io/github/license/libre-devops/terraform-msgraph-xdr-custom-detection-rules)](./LICENSE)
 
 ---
 
@@ -50,7 +50,7 @@ grouping that also drives the `rules_by_category` and `mitre_coverage` outputs. 
 like this:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/libre-devops/terraform-msgraph-detection-rules/main/schema/custom-detection.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/libre-devops/terraform-msgraph-xdr-custom-detection-rules/main/schema/custom-detection.schema.json
 display_name: Certutil used to download remote content
 status: enabled            # enabled | disabled (default enabled)
 frequency: PT3H            # PT0S (Continuous) | PT1H | PT3H | PT12H | PT24H
@@ -77,7 +77,9 @@ device_groups: [Workstations-Corp]   # optional scoping
 ```
 
 The same schema works as HCL through `custom_rules` for rules a stack composes or generates, and
-the module's own `catalog/` baseline uses it too: one validator, one normaliser, three sources.
+the module's own `catalog/` baseline uses it too: one validator, one normaliser, three sources,
+**deployed simultaneously** (YAML directory, HCL rules and the baseline coexist in one call; rule
+ids must be unique across all three, and the plan names any collision).
 
 ## Every field checked, every error named
 
@@ -126,19 +128,23 @@ are stable, and `id_prefix` namespaces everything a call owns for side by side d
 
 1. **Editor**: yaml-language-server against `schema/custom-detection.schema.json` while typing.
 2. **Plan**: this module's validator, offline, every field, every file, one aggregated failure.
-3. **CI, local lint**: KQL syntax parsing (Kusto.Language) via the LibreDevOpsHelpers gate.
-4. **CI, remote validation**: each query executed against the tenant with the Graph v1.0
-   `security/runHuntingQuery` endpoint (`ThreatHunting.Read.All`), proving tables and columns
-   before anything deploys.
-5. **Apply**: the Graph create itself is the final authority (it validates the query and the
-   required result columns server side).
+3. **CI, local lint**: KQL syntax parsing (Kusto.Language) via the LibreDevOpsHelpers gate, fast
+   feedback on pull requests before anything touches the tenant.
+4. **Apply, in graph**: `remote_query_validation` (on by default) runs every rule's query against
+   the tenant's real advanced hunting schema through the Graph v1.0 `security/runHuntingQuery`
+   action, inside the Terraform graph and before the rule resource itself, with `| take 1`
+   appended so no meaningful data returns. The response schema (the query's output columns) is
+   tracked in state, and a query change replaces its validation action, so re-validation happens
+   exactly when a query changes. A missing table or column fails the apply with the rule named.
+5. **Apply, the create**: the Graph detection rule create is the final authority (it validates the
+   query and the required result columns server side).
 
 ## Permissions
 
 | Path | Permission |
 | ---- | ---------- |
 | Deploy rules (app or delegated) | `CustomDetection.ReadWrite.All` |
-| Remote query validation in CI | `ThreatHunting.Read.All` |
+| Remote query validation (in graph, default on; also usable from CI) | `ThreatHunting.Read.All` |
 
 Delegated callers also need a Defender XDR role that manages detections (Security Administrator,
 or unified RBAC **Detection tuning (Manage)**). The provider authenticates from the environment

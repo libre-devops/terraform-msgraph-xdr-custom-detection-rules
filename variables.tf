@@ -107,6 +107,21 @@ DESC
   }
 }
 
+variable "hunting_api_version" {
+  description = <<DESC
+Microsoft Graph API version for the remote query validation calls (security/runHuntingQuery).
+Defaults to v1.0, where the hunting API is generally available; independent of api_version because
+the detection rule API and the hunting API promote separately.
+DESC
+  type        = string
+  default     = "v1.0"
+
+  validation {
+    condition     = contains(["beta", "v1.0"], var.hunting_api_version)
+    error_message = "hunting_api_version must be beta or v1.0."
+  }
+}
+
 variable "id_prefix" {
   description = <<DESC
 Optional prefix prepended to every rule id (baseline and custom), namespacing the rules this module
@@ -120,5 +135,34 @@ DESC
   validation {
     condition     = var.id_prefix == null || can(regex("^[A-Za-z0-9][A-Za-z0-9._-]*$", var.id_prefix))
     error_message = "id_prefix must start with a letter or digit and use only letters, digits, dots, underscores, or hyphens."
+  }
+}
+
+variable "remote_query_validation" {
+  description = <<DESC
+Run every rule's KQL against the tenant through the Graph runHuntingQuery action inside the
+Terraform graph, before the rule is created or updated. This proves tables and columns against the
+real advanced hunting schema server side (with `| take 1` appended so no meaningful data returns),
+and the response schema (the query's output columns) is tracked in state. A query change replaces
+its validation action, so re-validation happens exactly when a query changes. The applying
+principal needs ThreatHunting.Read.All; set false to opt out (for example, a principal with only
+CustomDetection.ReadWrite.All).
+DESC
+  type        = bool
+  default     = true
+}
+
+variable "remote_validation_timespan" {
+  description = <<DESC
+ISO 8601 timespan the remote validation queries look back over. Validation needs schema soundness,
+not data, so the default PT1H keeps the scanned window (and the tenant load) minimal; widen it if
+you want validation to double as a smoke test over real data.
+DESC
+  type        = string
+  default     = "PT1H"
+
+  validation {
+    condition     = can(regex("^P", var.remote_validation_timespan)) || can(regex("^\\d{4}-", var.remote_validation_timespan))
+    error_message = "remote_validation_timespan must be an ISO 8601 duration (PT1H, P1D) or timespan (start/duration or date forms)."
   }
 }

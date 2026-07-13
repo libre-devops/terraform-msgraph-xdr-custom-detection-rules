@@ -147,7 +147,7 @@ e2e stack="minimal":
     }
 
     $path = 'examples/{{ stack }}'
-    $key = 'terraform-msgraph-detection-rules-{{ stack }}.tfstate'
+    $key = 'terraform-msgraph-xdr-custom-detection-rules-{{ stack }}.tfstate'
     $added = $false
     try {
         Add-LdoStorageCurrentIpRule -ResourceGroup $rg -StorageAccountName $sa
@@ -225,7 +225,7 @@ _run op stack ws:
     }
 
     $path = 'examples/{{ stack }}'
-    $key = 'terraform-msgraph-detection-rules-{{ stack }}.tfstate'
+    $key = 'terraform-msgraph-xdr-custom-detection-rules-{{ stack }}.tfstate'
     $added = $false
     try {
         Add-LdoStorageCurrentIpRule -ResourceGroup $rg -StorageAccountName $sa

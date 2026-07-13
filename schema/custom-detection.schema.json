@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/libre-devops/terraform-msgraph-detection-rules/main/schema/custom-detection.schema.json",
+  "$id": "https://raw.githubusercontent.com/libre-devops/terraform-msgraph-xdr-custom-detection-rules/main/schema/custom-detection.schema.json",
   "title": "Libre DevOps custom detection rule",
   "description": "One Defender XDR custom detection rule per YAML file. Mirrors the Terraform module's plan-time validator (the module is authoritative): analysts get the same feedback in the editor via yaml-language-server, and CI can pre-check files with the same schema. Note: frequency is shown here with the service's default schedules; the module validates it against its allowed_frequencies input, which callers can narrow.",
   "type": "object",

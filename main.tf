@@ -10,6 +10,33 @@ resource "terraform_data" "schema_guard" {
   }
 }
 
+# In-graph remote validation: each rule's query runs against the tenant's advanced hunting schema
+# through the Graph runHuntingQuery action before the rule itself is created or updated, so a query
+# that references a missing table or column fails the apply here, with the rule named, instead of
+# at rule create. `| take 1` caps the result set (validation needs schema soundness, not data) and
+# the response schema, the query's output columns, is tracked in state so column changes surface.
+# A query change replaces its action, re-validating exactly when it matters. Gated by
+# remote_query_validation because the applying principal needs ThreatHunting.Read.All.
+resource "msgraph_resource_action" "validate_queries" {
+  for_each = { for k, v in local.rule_bodies : k => v if var.remote_query_validation }
+
+  resource_url = "security"
+  action       = "runHuntingQuery"
+  method       = "POST"
+  api_version  = var.hunting_api_version
+
+  body = {
+    Query    = "${each.value.queryCondition.queryText}\n| take 1"
+    Timespan = var.remote_validation_timespan
+  }
+
+  response_export_values = {
+    schema = "schema"
+  }
+
+  depends_on = [terraform_data.schema_guard]
+}
+
 # One Graph custom detection rule per validated rule, from every source (baseline catalog, the
 # analyst YAML directory, and custom_rules). The rule id is client provided (it doubles as the
 # for_each key, so plans stay stable and re-creates never collide), and updates PATCH the existing
