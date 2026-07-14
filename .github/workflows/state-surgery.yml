@@ -62,17 +62,17 @@ jobs:
             Add-LdoStorageCurrentIpRule -ResourceGroup $rg -StorageAccountName $sa
             $added = $true
             $path = 'examples/${{ inputs.stack }}'
-            terraform -chdir=$path init -input=false -reconfigure `
+            terraform "-chdir=$path" init -input=false -reconfigure `
               -backend-config=resource_group_name=$rg `
               -backend-config=storage_account_name=$sa `
               -backend-config=container_name='${{ secrets.TFSTATE_BLOB_CONTAINER }}' `
               -backend-config=key='terraform-msgraph-xdr-custom-detection-rules-examples-${{ inputs.stack }}.tfstate'
             if ($LASTEXITCODE -ne 0) { throw 'init failed' }
-            terraform -chdir=$path workspace select '${{ inputs.workspace }}'
+            terraform "-chdir=$path" workspace select '${{ inputs.workspace }}'
             foreach ($addr in ('${{ inputs.addresses }}' -split ' ')) {
               if (-not $addr) { continue }
               Write-Host "state rm $addr"
-              terraform -chdir=$path state rm $addr
+              terraform "-chdir=$path" state rm $addr
             }
           }
           finally {
