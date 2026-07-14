@@ -210,12 +210,14 @@ DESC
 
 variable "update_method" {
   description = <<DESC
-HTTP method for in place rule updates. Defaults to PUT (full object replace) because the service
-rejects partial PATCH payloads (live 400 on an update: "The DisplayName field is required", even
-though displayName had not changed), so updates must always carry the whole rule.
+HTTP method for in place rule updates. PATCH, the API's only supported update method (PUT 405s,
+proven live). One misleading failure mode to know: a PATCH against a rule that was deleted but is
+still served by a stale read replica fails with "The DisplayName field is required", because the
+service validates the payload as a create; the fix is state surgery on the ghost, not a method
+change (see the state-surgery workflow).
 DESC
   type        = string
-  default     = "PUT"
+  default     = "PATCH"
 
   validation {
     condition     = contains(["PATCH", "PUT"], var.update_method)
