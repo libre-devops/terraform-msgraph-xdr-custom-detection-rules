@@ -49,7 +49,7 @@ resource "msgraph_resource" "detection_rules" {
   url           = "security/rules/detectionRules"
   api_version   = var.api_version
   body          = each.value
-  update_method = "PATCH"
+  update_method = var.update_method
 
   response_export_values = {
     id           = "id"

@@ -207,3 +207,18 @@ DESC
   })
   default = {}
 }
+
+variable "update_method" {
+  description = <<DESC
+HTTP method for in place rule updates. Defaults to PUT (full object replace) because the service
+rejects partial PATCH payloads (live 400 on an update: "The DisplayName field is required", even
+though displayName had not changed), so updates must always carry the whole rule.
+DESC
+  type        = string
+  default     = "PUT"
+
+  validation {
+    condition     = contains(["PATCH", "PUT"], var.update_method)
+    error_message = "update_method must be PATCH or PUT."
+  }
+}
