@@ -428,6 +428,61 @@ locals {
     ]
   ])
 
+  # Live 400 (BadRequest): "At least one asset entity (Machine, User, or Mailbox) or an IP entity
+  # must be included." Every rule must map at least one asset from the query results.
+  v_asset_entity = [
+    for k, r in local.rules :
+    "${r.file}: at least one asset entity mapping is required (accounts, hosts, mailboxes, or ips); related evidence entities like mail_messages or files are not enough for the API"
+    if r.valid && length(setintersection(["accounts", "hosts", "mailboxes", "ips"], keys(can(keys(try(r.raw.alert.entity_mappings, 0))) ? r.raw.alert.entity_mappings : {}))) == 0
+  ]
+
+  # Product documented caps: 20 custom detail pairs per rule, and up to three {{Column}} dynamic
+  # references in each of the alert title and description.
+  v_custom_details_cap = [
+    for k, r in local.rules :
+    "${r.file}: alert.custom_details carries ${length(try(r.raw.alert.custom_details, {}))} pairs; the service caps a rule at 20"
+    if r.valid && can(keys(try(r.raw.alert.custom_details, 0))) && length(r.raw.alert.custom_details) > 20
+  ]
+
+  v_dynamic_refs = concat(
+    [
+      for k, r in local.rules :
+      "${r.file}: alert.title references more than three columns with {{ }}; the service supports up to three per field"
+      if r.valid && length(regexall("\\{\\{", try(tostring(r.raw.alert.title), ""))) > 3
+    ],
+    [
+      for k, r in local.rules :
+      "${r.file}: alert.description references more than three columns with {{ }}; the service supports up to three per field"
+      if r.valid && length(regexall("\\{\\{", try(tostring(r.raw.alert.description), ""))) > 3
+    ],
+  )
+
+  # Continuous (NRT) rules run under documented restrictions: one table, no joins, unions or
+  # externaldata, and no comment lines, against a supported table allow-list.
+  nrt_supported_tables = [
+    "AlertEvidence", "CloudAppEvents", "DeviceEvents", "DeviceFileCertificateInfo",
+    "DeviceFileEvents", "DeviceImageLoadEvents", "DeviceLogonEvents", "DeviceNetworkEvents",
+    "DeviceNetworkInfo", "DeviceInfo", "DeviceProcessEvents", "DeviceRegistryEvents",
+    "EmailAttachmentInfo", "EmailEvents", "EmailPostDeliveryEvents", "EmailUrlInfo",
+    "IdentityDirectoryEvents", "IdentityLogonEvents", "IdentityQueryEvents", "UrlClickEvents",
+    "AuditLogs", "AWSCloudTrail", "AWSGuardDuty", "AzureActivity", "CommonSecurityLog",
+    "GCPAuditLogs", "MicrosoftGraphActivityLogs", "OfficeActivity", "ProofpointPOD",
+    "SecurityAlert", "SecurityEvent", "SigninLogs",
+  ]
+
+  v_nrt = flatten([
+    for k, r in local.rules : (
+      r.valid && try(upper(tostring(r.raw.frequency)), "") == "PT0S" ? concat(
+        length(regexall("(?i)\\bjoin\\b|\\bunion\\b|externaldata", try(tostring(r.raw.query), ""))) > 0 ?
+        ["${r.file}: Continuous (NRT) queries must not use join, union, or externaldata"] : [],
+        length(regexall("//", try(tostring(r.raw.query), ""))) > 0 ?
+        ["${r.file}: Continuous (NRT) queries must not contain comment lines"] : [],
+        contains(local.nrt_supported_tables, try(trimspace(split("|", tostring(r.raw.query))[0]), "")) ? [] :
+        ["${r.file}: Continuous (NRT) supports a fixed table list, and '${try(trimspace(split("|", tostring(r.raw.query))[0]), "?")}' is not on it (see the docs; use an hourly schedule instead)"],
+      ) : []
+    )
+  ])
+
   # ---- automated actions (destructive, gated) ----
   v_actions_gate = var.allow_automated_actions ? [] : [
     for k, r in local.rules :
@@ -497,7 +552,9 @@ locals {
     local.v_parse, local.v_duplicates, local.v_top_keys, local.v_required, local.v_hcl_id,
     local.v_key_format, local.v_display_name, local.v_status, local.v_frequency, local.v_query,
     local.v_device_groups, local.v_alert, local.v_mitre, local.v_entity_mappings,
-    local.v_mail_message_combo, local.v_actions_gate, local.v_automated_actions, local.v_overrides,
+    local.v_mail_message_combo, local.v_asset_entity, local.v_custom_details_cap,
+    local.v_dynamic_refs, local.v_nrt, local.v_actions_gate, local.v_automated_actions,
+    local.v_overrides,
   ))
 }
 

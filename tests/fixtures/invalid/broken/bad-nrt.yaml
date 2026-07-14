@@ -1,0 +1,12 @@
+display_name: NRT rule breaking the NRT rules
+frequency: PT0S
+query: |
+  Fake_CL
+  | join kind=inner (DeviceEvents) on DeviceId
+  // a comment line
+  | project Timestamp, ReportId, DeviceId
+alert:
+  severity: low
+  entity_mappings:
+    hosts:
+      - device_id_column: DeviceId

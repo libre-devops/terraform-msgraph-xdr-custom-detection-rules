@@ -8,8 +8,8 @@ description: >-
   payloads onto a device.
 status: enabled
 frequency: PT3H
-device_groups:
-  - Workstations-Corp
+# device_groups scoping is deliberately absent: the API validates the names against REAL device
+# groups (live 400: "Group names (...) are invalid"), so a portable example cannot carry one.
 query: |
   DeviceProcessEvents
   | where FileName =~ "certutil.exe"

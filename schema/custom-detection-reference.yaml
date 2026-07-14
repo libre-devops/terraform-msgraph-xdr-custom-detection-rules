@@ -67,9 +67,9 @@ alert: # REQUIRED.
   custom_details: # Optional. Detail name to QUERY COLUMN name; keys pass through untouched
     CommandLine: ProcessCommandLine # (they are display labels), values must be columns the query returns.
 
-  entity_mappings: # Optional. Map query columns to alert entities; every group and column
-    accounts: #   below comes from the Graph metadata. At least one mapping is strongly
-      - aad_user_id_column: "" #   recommended (the SOAR enrichment feeds on entities).
+  entity_mappings: # REQUIRED in practice: the API demands at least one ASSET entity
+    accounts: #   (accounts, hosts, mailboxes, or ips); related evidence groups alone
+      - aad_user_id_column: "" #   (mail_messages, files, urls, ...) are rejected (live 400).
         dns_domain_column: ""
         name_column: ""
         nt_domain_column: ""
@@ -130,7 +130,8 @@ alert: # REQUIRED.
 # --- Scoping and response ------------------------------------------------------------------------
 
 device_groups: # Optional. Restrict the rule to these device groups (organizationalScope).
-  - Workstations-Corp
+  - Workstations-Corp # The names must EXIST in the tenant (live 400: "Group names (...) are
+#   invalid"), so portable catalogs and examples omit scoping.
 
 automated_actions: # Optional and GATED: these act on real assets when the rule fires, so the
   #   module refuses every rule carrying them until the call sets

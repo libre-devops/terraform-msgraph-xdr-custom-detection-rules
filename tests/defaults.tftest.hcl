@@ -201,6 +201,7 @@ run "sloppy_values_normalise" {
             { tactic = "credential access", techniques = ["t1110"] },
             { tactic = "DefenceEvasion", techniques = [{ technique = "t1562", sub_techniques = ["t1562.008"] }] },
           ]
+          entity_mappings = { accounts = [{ upn_column = "AccountUpn" }] }
         }
       }
     }

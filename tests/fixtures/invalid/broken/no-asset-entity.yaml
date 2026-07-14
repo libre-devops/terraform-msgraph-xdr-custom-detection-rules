@@ -1,0 +1,12 @@
+display_name: Related evidence only
+frequency: PT1H
+query: |
+  EmailEvents
+  | project Timestamp, ReportId, NetworkMessageId, RecipientEmailAddress, SenderFromAddress
+alert:
+  severity: low
+  entity_mappings:
+    mail_messages:
+      - network_message_id_column: NetworkMessageId
+        recipient_column: RecipientEmailAddress
+        sender_column: SenderFromAddress

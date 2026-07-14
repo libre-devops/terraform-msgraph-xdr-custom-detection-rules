@@ -26,6 +26,10 @@ alert:
         recipient_column: RecipientEmailAddress
         sender_column: SenderFromAddress
         subject_column: Subject
+    # The API also requires at least one ASSET entity (machine, user, mailbox, or IP); mail
+    # messages alone are related evidence (live 400).
+    mailboxes:
+      - primary_address_column: RecipientEmailAddress
 automated_actions:
   soft_delete_emails:
     - network_message_id_column: NetworkMessageId
