@@ -135,9 +135,11 @@ tenant and is now encoded in the module rather than left for you to find:
 - **Mail message mappings have a mandatory column combination.** Network message id, recipient and
   sender must map together (a lesser pair 400s with "at least one mandatory field combination");
   the validator enforces it and subject is recommended.
-- **Deletes can hang server side** (observed via both the API and the portal). The rule resource
-  carries a 10 minute delete timeout and transient error retries by default (`timeouts`,
-  `retry_error_message_regex`), so a wedged delete fails loudly instead of spinning.
+- **Deletion is eventually consistent.** The API accepts the delete, then the read path can keep
+  returning the rule for many minutes (the portal shows the same lag), and the provider polls that
+  read path before declaring success. The rule resource carries a 30 minute delete timeout and
+  transient error retries by default (`timeouts`, `retry_error_message_regex`); parallel deletes
+  share one lag window.
 - **Portability is a catalog quality bar.** Catalog rules only use hunting tables that resolve in
   any Defender XDR tenant (Device*, Email*, Identity*, CloudApp*). Entra specific tables like
   `AadSignInEventsBeta` only resolve when that data flows into XDR, so a rule on them fails both

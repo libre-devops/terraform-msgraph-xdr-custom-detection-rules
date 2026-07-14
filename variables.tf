@@ -193,14 +193,15 @@ DESC
 
 variable "timeouts" {
   description = <<DESC
-Operation timeouts for the detection rule resource. The delete default is 10 minutes because rule
-deletion was observed hanging server side (live, via both the API and the portal): a wedged delete
-now fails loudly at the timeout instead of spinning into the provider default, and transient errors
-retry per retry_error_message_regex.
+Operation timeouts for the detection rule resource. Deletion is EVENTUALLY CONSISTENT server side
+(proven live: the API accepts the delete, then the provider polls the read path, which can keep
+returning the rule for many minutes; the portal shows the same lag), so the delete default is 30
+minutes; deletes run in parallel, so a destroy shares one lag window rather than paying it per
+rule. Transient errors retry per retry_error_message_regex.
 DESC
   type = object({
     create = optional(string, "10m")
-    delete = optional(string, "10m")
+    delete = optional(string, "30m")
     read   = optional(string, "5m")
     update = optional(string, "10m")
   })

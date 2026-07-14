@@ -135,9 +135,11 @@ tenant and is now encoded in the module rather than left for you to find:
 - **Mail message mappings have a mandatory column combination.** Network message id, recipient and
   sender must map together (a lesser pair 400s with "at least one mandatory field combination");
   the validator enforces it and subject is recommended.
-- **Deletes can hang server side** (observed via both the API and the portal). The rule resource
-  carries a 10 minute delete timeout and transient error retries by default (`timeouts`,
-  `retry_error_message_regex`), so a wedged delete fails loudly instead of spinning.
+- **Deletion is eventually consistent.** The API accepts the delete, then the read path can keep
+  returning the rule for many minutes (the portal shows the same lag), and the provider polls that
+  read path before declaring success. The rule resource carries a 30 minute delete timeout and
+  transient error retries by default (`timeouts`, `retry_error_message_regex`); parallel deletes
+  share one lag window.
 - **Portability is a catalog quality bar.** Catalog rules only use hunting tables that resolve in
   any Defender XDR tenant (Device*, Email*, Identity*, CloudApp*). Entra specific tables like
   `AadSignInEventsBeta` only resolve when that data flows into XDR, so a rule on them fails both
@@ -242,7 +244,7 @@ No modules.
 | <a name="input_remote_validation_append_take"></a> [remote\_validation\_append\_take](#input\_remote\_validation\_append\_take) | Append a trailing "\| take 1" to each remote validation query. Off by default on purpose: appending<br/>an operator can interact badly with queries that already end in a take or limit, or whose final<br/>operator matters, so the default runs every query verbatim and relies on the hunting endpoint's own<br/>server side result caps. Enable it deliberately when your queries tolerate a trailing take and you<br/>want validation to return as little data as possible. | `bool` | `false` | no |
 | <a name="input_remote_validation_timespan"></a> [remote\_validation\_timespan](#input\_remote\_validation\_timespan) | ISO 8601 timespan the remote validation queries look back over. Validation needs schema soundness,<br/>not data, so the default PT1H keeps the scanned window (and the tenant load) minimal; widen it if<br/>you want validation to double as a smoke test over real data. | `string` | `"PT1H"` | no |
 | <a name="input_retry_error_message_regex"></a> [retry\_error\_message\_regex](#input\_retry\_error\_message\_regex) | Regular expressions the provider retries on when a Graph call fails, applied to the detection rule<br/>resource and the validation actions. Transient service noise is retried by default; the provider<br/>retries matching errors with backoff until the operation timeout bounds it (the provider exposes no<br/>retry count knob, so the timeout is the ceiling). Set null to disable retries. | `list(string)` | <pre>[<br/>  "(?i)too many requests",<br/>  "(?i)service unavailable",<br/>  "(?i)internal server error",<br/>  "(?i)timeout",<br/>  "(?i)temporarily unavailable"<br/>]</pre> | no |
-| <a name="input_timeouts"></a> [timeouts](#input\_timeouts) | Operation timeouts for the detection rule resource. The delete default is 10 minutes because rule<br/>deletion was observed hanging server side (live, via both the API and the portal): a wedged delete<br/>now fails loudly at the timeout instead of spinning into the provider default, and transient errors<br/>retry per retry\_error\_message\_regex. | <pre>object({<br/>    create = optional(string, "10m")<br/>    delete = optional(string, "10m")<br/>    read   = optional(string, "5m")<br/>    update = optional(string, "10m")<br/>  })</pre> | `{}` | no |
+| <a name="input_timeouts"></a> [timeouts](#input\_timeouts) | Operation timeouts for the detection rule resource. Deletion is EVENTUALLY CONSISTENT server side<br/>(proven live: the API accepts the delete, then the provider polls the read path, which can keep<br/>returning the rule for many minutes; the portal shows the same lag), so the delete default is 30<br/>minutes; deletes run in parallel, so a destroy shares one lag window rather than paying it per<br/>rule. Transient errors retry per retry\_error\_message\_regex. | <pre>object({<br/>    create = optional(string, "10m")<br/>    delete = optional(string, "30m")<br/>    read   = optional(string, "5m")<br/>    update = optional(string, "10m")<br/>  })</pre> | `{}` | no |
 
 ## Outputs
 
