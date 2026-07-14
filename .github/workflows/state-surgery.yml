@@ -1,0 +1,80 @@
+name: State surgery
+
+# Manual, surgical `terraform state rm` against an example stack's remote state, for resources the
+# API has made unmanageable (the live case: a deleted detection rule whose read replica keeps
+# serving it, so refresh retains it while update and delete 404). Best effort per address; the
+# firewall dance mirrors the terraform-azure action's engine.
+on:
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: Example stack (minimal or complete).
+        type: choice
+        options: [minimal, complete]
+        default: minimal
+      addresses:
+        description: Space separated resource addresses to remove from state.
+        type: string
+        required: true
+      workspace:
+        description: Terraform workspace.
+        type: string
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  surgery:
+    name: state rm (${{ inputs.stack }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Remove addresses from state
+        shell: pwsh
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_USE_AZUREAD: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module LibreDevOpsHelpers -MinimumVersion 2.6.0 -Force -Scope CurrentUser
+          Import-Module LibreDevOpsHelpers
+          Set-LdoLogFormat -Format Text
+          $rg = '${{ secrets.TFSTATE_RESOURCE_GROUP }}'
+          $sa = '${{ secrets.TFSTATE_STORAGE_ACCOUNT }}'
+          $added = $false
+          try {
+            Add-LdoStorageCurrentIpRule -ResourceGroup $rg -StorageAccountName $sa
+            $added = $true
+            $path = 'examples/${{ inputs.stack }}'
+            terraform -chdir=$path init -input=false -reconfigure `
+              -backend-config=resource_group_name=$rg `
+              -backend-config=storage_account_name=$sa `
+              -backend-config=container_name='${{ secrets.TFSTATE_BLOB_CONTAINER }}' `
+              -backend-config=key='terraform-msgraph-xdr-custom-detection-rules-examples-${{ inputs.stack }}.tfstate'
+            if ($LASTEXITCODE -ne 0) { throw 'init failed' }
+            terraform -chdir=$path workspace select '${{ inputs.workspace }}'
+            foreach ($addr in ('${{ inputs.addresses }}' -split ' ')) {
+              if (-not $addr) { continue }
+              Write-Host "state rm $addr"
+              terraform -chdir=$path state rm $addr
+            }
+          }
+          finally {
+            if ($added) { Remove-LdoStorageCurrentIpRule -ResourceGroup $rg -StorageAccountName $sa }
+          }

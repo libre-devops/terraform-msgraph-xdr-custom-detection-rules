@@ -41,8 +41,8 @@ resource "msgraph_resource_action" "validate_queries" {
 
 # One Graph custom detection rule per validated rule, from every source (baseline catalog, the
 # analyst YAML directory, and custom_rules). The rule id is client provided (it doubles as the
-# for_each key, so plans stay stable and re-creates never collide), and updates PATCH the existing
-# rule in place.
+# for_each key, so plans stay stable and re-creates never collide), and updates replace the full
+# rule in place (update_method, PUT by default per the live PATCH rejection).
 resource "msgraph_resource" "detection_rules" {
   for_each = local.rule_bodies
 
