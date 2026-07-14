@@ -441,7 +441,7 @@ locals {
   v_custom_details_cap = [
     for k, r in local.rules :
     "${r.file}: alert.custom_details carries ${length(try(r.raw.alert.custom_details, {}))} pairs; the service caps a rule at 20"
-    if r.valid && can(keys(try(r.raw.alert.custom_details, 0))) && length(r.raw.alert.custom_details) > 20
+    if r.valid && (can(keys(try(r.raw.alert.custom_details, 0))) ? try(length(r.raw.alert.custom_details), 0) > 20 : false)
   ]
 
   v_dynamic_refs = concat(
