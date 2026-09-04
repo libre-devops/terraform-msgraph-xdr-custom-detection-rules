@@ -154,6 +154,16 @@ until the call sets `allow_automated_actions = true`, and the failure names the 
 gate on is a reviewed decision for the calling stack, never a side effect of dropping a file into a
 folder.
 
+Two of the sixteen actions are **retiring on 1 October 2026**, when Microsoft removes
+`initiateInvestigationResponseAction` and `collectInvestigationPackageResponseAction` from the Graph
+security API. That follows the retirement of standalone AIR on 1 September 2026 (MC1411577): AIR no
+longer runs as a separate investigation experience, and standalone AIR investigation completion and
+auto-closure events no longer occur. Both keys stay in the module until the removal date so a
+currently valid config keeps working, and `checks.tf` warns on any rule that uses one rather than
+failing it. Migrate `initiate_investigations` to `run_antivirus_scans`, which takes the same
+`device_id_column` shape; `collect_investigation_packages` has no like-for-like successor, and
+Microsoft points at `automatedAction` on `detectionAction`.
+
 ## The curated baseline
 
 `baseline_enabled` (on by default) deploys the reviewed starter pack from `catalog/`, currently six

@@ -51,3 +51,8 @@ output "rules_by_category" {
     c => sort([for k, r in local.rules : k if r.category == c])
   }
 }
+
+output "rules_using_retired_actions" {
+  description = "Files of any rule still using an investigation response action Microsoft removes from the Graph security API on 2026-10-01 (initiate_investigations, collect_investigation_packages). Empty is the healthy state; surface it in a calling stack to track the migration. checks.tf warns on the same list."
+  value       = local.retired_action_rules
+}

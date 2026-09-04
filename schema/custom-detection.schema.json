@@ -308,6 +308,8 @@
           }
         },
         "collect_investigation_packages": {
+          "deprecated": true,
+          "description": "DEPRECATED, removed from the Graph security API on 2026-10-01 with the retirement of standalone AIR (MC1411577). No like-for-like successor; Microsoft points at automatedAction on detectionAction.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/deviceAction"
@@ -332,6 +334,8 @@
           }
         },
         "initiate_investigations": {
+          "deprecated": true,
+          "description": "DEPRECATED, removed from the Graph security API on 2026-10-01 with the retirement of standalone AIR (MC1411577). Migrate to run_antivirus_scans, which takes the same device_id_column shape.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/deviceAction"

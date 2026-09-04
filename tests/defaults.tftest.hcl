@@ -295,6 +295,43 @@ run "automated_actions_allowed_when_gated_open" {
   }
 }
 
+# The retired-action detection must actually fire. A warning nobody has seen fire is a warning that
+# may never fire, which is the failure mode this whole check exists to prevent, so it is asserted
+# through the shared local rather than trusted. Delete this run with the keys on 2026-10-01.
+run "retired_investigation_actions_are_detected" {
+  command = plan
+
+  variables {
+    baseline_enabled        = false
+    custom_detections_dir   = "tests/fixtures/retired-actions"
+    allow_automated_actions = true
+  }
+
+  assert {
+    condition     = output.rules_using_retired_actions == tolist(["tests/fixtures/retired-actions/endpoint/rule-with-retired-action.yaml"])
+    error_message = "A rule using initiate_investigations should be reported in rules_using_retired_actions, which is what checks.tf warns on."
+  }
+
+  # The check is advisory in a real plan (a warning) but a failure in terraform test, so declaring it
+  # here is what asserts it actually tripped rather than silently passing.
+  expect_failures = [check.retired_investigation_actions]
+}
+
+run "clean_rules_report_no_retired_actions" {
+  command = plan
+
+  variables {
+    baseline_enabled        = false
+    custom_detections_dir   = "tests/fixtures/actions"
+    allow_automated_actions = true
+  }
+
+  assert {
+    condition     = length(output.rules_using_retired_actions) == 0
+    error_message = "run_antivirus_scans and isolate_devices are not retiring, so they must not be reported."
+  }
+}
+
 run "unknown_override_keys_fail" {
   command = plan
 

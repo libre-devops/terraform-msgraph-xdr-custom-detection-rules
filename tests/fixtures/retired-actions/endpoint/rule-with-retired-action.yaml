@@ -1,0 +1,21 @@
+# Fixture for the retired-action detection. Carries initiate_investigations, which Microsoft removes
+# from the Graph security API on 2026-10-01 with the retirement of standalone AIR, so this rule must
+# appear in rules_using_retired_actions (and therefore in the checks.tf warning). Keep it until the
+# module drops the key entirely; at that point this fixture and its run block go with it.
+display_name: Fixture rule carrying a retired investigation action
+frequency: PT24H
+query: |
+  DeviceProcessEvents
+  | where FileName == "fixture-never-matches.exe"
+  | project Timestamp, ReportId, DeviceId
+alert:
+  severity: informational
+  mitre:
+    - tactic: Execution
+      techniques: [T1204]
+  entity_mappings:
+    hosts:
+      - device_id_column: DeviceId
+automated_actions:
+  initiate_investigations:
+    - device_id_column: DeviceId

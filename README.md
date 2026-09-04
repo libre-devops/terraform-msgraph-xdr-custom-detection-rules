@@ -154,6 +154,16 @@ until the call sets `allow_automated_actions = true`, and the failure names the 
 gate on is a reviewed decision for the calling stack, never a side effect of dropping a file into a
 folder.
 
+Two of the sixteen actions are **retiring on 1 October 2026**, when Microsoft removes
+`initiateInvestigationResponseAction` and `collectInvestigationPackageResponseAction` from the Graph
+security API. That follows the retirement of standalone AIR on 1 September 2026 (MC1411577): AIR no
+longer runs as a separate investigation experience, and standalone AIR investigation completion and
+auto-closure events no longer occur. Both keys stay in the module until the removal date so a
+currently valid config keeps working, and `checks.tf` warns on any rule that uses one rather than
+failing it. Migrate `initiate_investigations` to `run_antivirus_scans`, which takes the same
+`device_id_column` shape; `collect_investigation_packages` has no like-for-like successor, and
+Microsoft points at `automatedAction` on `detectionAction`.
+
 ## The curated baseline
 
 `baseline_enabled` (on by default) deploys the reviewed starter pack from `catalog/`, currently six
@@ -245,6 +255,7 @@ No modules.
 | <a name="input_remote_validation_timespan"></a> [remote\_validation\_timespan](#input\_remote\_validation\_timespan) | ISO 8601 timespan the remote validation queries look back over. Validation needs schema soundness,<br/>not data, so the default PT1H keeps the scanned window (and the tenant load) minimal; widen it if<br/>you want validation to double as a smoke test over real data. | `string` | `"PT1H"` | no |
 | <a name="input_retry_error_message_regex"></a> [retry\_error\_message\_regex](#input\_retry\_error\_message\_regex) | Regular expressions the provider retries on when a Graph call fails, applied to the detection rule<br/>resource and the validation actions. Transient service noise is retried by default; the provider<br/>retries matching errors with backoff until the operation timeout bounds it (the provider exposes no<br/>retry count knob, so the timeout is the ceiling). Set null to disable retries. | `list(string)` | <pre>[<br/>  "(?i)too many requests",<br/>  "(?i)service unavailable",<br/>  "(?i)internal server error",<br/>  "(?i)timeout",<br/>  "(?i)temporarily unavailable"<br/>]</pre> | no |
 | <a name="input_timeouts"></a> [timeouts](#input\_timeouts) | Operation timeouts for the detection rule resource. Deletion is EVENTUALLY CONSISTENT server side<br/>(proven live: the API accepts the delete, then the provider polls the read path, which can keep<br/>returning the rule for many minutes; the portal shows the same lag), so the delete default is 30<br/>minutes; deletes run in parallel, so a destroy shares one lag window rather than paying it per<br/>rule. Transient errors retry per retry\_error\_message\_regex. | <pre>object({<br/>    create = optional(string, "10m")<br/>    delete = optional(string, "30m")<br/>    read   = optional(string, "5m")<br/>    update = optional(string, "10m")<br/>  })</pre> | `{}` | no |
+| <a name="input_update_method"></a> [update\_method](#input\_update\_method) | HTTP method for in place rule updates. PATCH, the API's only supported update method (PUT 405s,<br/>proven live). One misleading failure mode to know: a PATCH against a rule that was deleted but is<br/>still served by a stale read replica fails with "The DisplayName field is required", because the<br/>service validates the payload as a create; the fix is state surgery on the ghost, not a method<br/>change (see the state-surgery workflow). | `string` | `"PATCH"` | no |
 
 ## Outputs
 
@@ -256,4 +267,5 @@ No modules.
 | <a name="output_mitre_coverage"></a> [mitre\_coverage](#output\_mitre\_coverage) | ATT&CK coverage rolled up from the authored mitre blocks: tactics and techniques each map to the rule ids that cover them. Feeds the coverage report and workbooks. |
 | <a name="output_rules"></a> [rules](#output\_rules) | Metadata for every deployed rule: display name, category, source (baseline, custom\_detections\_dir, or custom\_rules), the file it came from, status, schedule, severity, and its MITRE tactics and techniques. |
 | <a name="output_rules_by_category"></a> [rules\_by\_category](#output\_rules\_by\_category) | Rule ids grouped by category (the analyst facing logical separation: the first level folder for file rules, the category attribute or "custom" for HCL rules). |
+| <a name="output_rules_using_retired_actions"></a> [rules\_using\_retired\_actions](#output\_rules\_using\_retired\_actions) | Files of any rule still using an investigation response action Microsoft removes from the Graph security API on 2026-10-01 (initiate\_investigations, collect\_investigation\_packages). Empty is the healthy state; surface it in a calling stack to track the migration. checks.tf warns on the same list. |
 <!-- END_TF_DOCS -->

@@ -76,6 +76,14 @@ locals {
 
   # Automated response actions and their attributes (automatedActionSet in $metadata). Every action
   # here acts on real assets when the rule fires, which is why allow_automated_actions gates them.
+  #
+  # RETIRING 2026-10-01: collect_investigation_packages and initiate_investigations. Microsoft removes
+  # collectInvestigationPackageResponseAction and initiateInvestigationResponseAction from the Graph
+  # security API on that date, following the retirement of standalone AIR on 2026-09-01 (MC1411577).
+  # They are kept here until then so a currently valid config keeps working; checks.tf warns on any
+  # rule that uses one. Migration: initiate_investigations -> run_antivirus_scans (identical
+  # device_id_column shape); the investigation package has no like-for-like successor, and Microsoft
+  # points at automatedAction on detectionAction.
   automated_action_keys = {
     allow_files                    = ["sha1_column", "sha256_column", "device_group_names"]
     block_files                    = ["sha1_column", "sha256_column", "device_group_names"]
@@ -113,6 +121,15 @@ locals {
     soft_delete_emails             = "softDeleteEmails"
     stop_and_quarantine_files      = "stopAndQuarantineFiles"
   }
+
+  # Rules using an action Microsoft removes on 2026-10-01 (see the RETIRING note above). Derived once
+  # so checks.tf and the rules_using_retired_actions output cannot drift apart, and so the module's
+  # own tests can assert the detection actually fires: an untested warning is one that never fires.
+  retired_action_rules = sort([
+    for k, r in local.rules : r.file
+    if length(try(r.raw.automated_actions.initiate_investigations, [])) > 0
+    || length(try(r.raw.automated_actions.collect_investigation_packages, [])) > 0
+  ])
 
   override_keys = ["enabled", "status", "frequency", "severity", "device_groups"]
 
